@@ -58,11 +58,10 @@ XOXO.describeLayerFull = function (comp, l, withBounds) {
     d.audioLevel = al.value;
     d.audioKeys = al.numKeys;
   } catch (e9) { }
-  if (withBounds && (d.kind === "text" || d.kind === "shape")) {
-    d.bounds = XOXO.layerBounds(comp, l);
-    try { d.position = l.property("ADBE Transform Group").property("ADBE Position").value; } catch (e10) { }
-    try { d.scale = l.property("ADBE Transform Group").property("ADBE Scale").value; } catch (e11) { }
-  }
+  try { d.position = l.property("ADBE Transform Group").property("ADBE Position").value; } catch (e10) { }
+  try { d.scale = l.property("ADBE Transform Group").property("ADBE Scale").value; } catch (e11) { }
+  try { d.numMasks = l.property("ADBE Mask Parade").numProperties; } catch (e12) { }
+  if (withBounds && (d.kind === "text" || d.kind === "shape")) d.bounds = XOXO.layerBounds(comp, l);
   return d;
 };
 

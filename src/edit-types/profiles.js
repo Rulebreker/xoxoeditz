@@ -38,7 +38,7 @@ export const EDIT_TYPES = Object.fromEntries([
     typography: { style: 'rhythmic', animations: ['scale_punch', 'glitch_reveal', 'word_reveal', 'slide'], titleCase: 'upper' },
     sfx: { prefer: { transition: ['WHOOSH', 'TRANSITION'], impact: ['IMPACT', 'HIT', 'BOOM'], riser: ['RISER', 'REVERSE'], text: ['UI', 'GLITCH'], ambience: [] }, layering: 2 },
     music: { genres: ['ACTION', 'TECHNO', 'PHONK'], bpmRange: [100, 175] }, color: 'CINEMATIC', look: { grain: 0.35, vignette: 0.4, glow: 0.35 },
-    shots: { FULL_BLEED: 1, CROP_DETAIL: 0.7, '2_5D': 0.15, CAMERA: 0.6, FREEZE_FRAME: 0.5, IMPACT_SCENE: 0.7, TEXT_SCENE: 0.3, DARK_TITLE: 0.3, END_CARD: 0.4 },
+    shots: { FULL_BLEED: 1, CROP_DETAIL: 0.7, '2_5D': 0.2, PARALLAX: 0.1, CAMERA: 0.6, SPLIT_SCREEN: 0.2, PIP: 0.12, FREEZE_FRAME: 0.5, IMPACT_SCENE: 0.7, TEXT_SCENE: 0.3, DARK_TITLE: 0.3, END_CARD: 0.4 },
     notes: ['cuts live on beats; speed changes anticipate impacts; no slideshow pacing'] }),
   T('cinematic', 'Cinematic', ['film', 'filmic', 'movie'], 'Slow, controlled, atmospheric: depth, restrained type, subtle sound design.', {
     dials: { intensity: 0.45, cutFrequency: 0.2, velocity: 0.1, speedVariation: 0.1, camera: 0.5, motionBlur: 0.4, effects: 0.3, sfx: 0.35, transitions: 0.25, text: 0.25, color: 0.7, impact: 0.2, beatSync: 0.4, depth: 0.6, music: 0.5 },
@@ -52,7 +52,7 @@ export const EDIT_TYPES = Object.fromEntries([
     transitions: { palette: [{ type: 'dissolve', w: 5 }, { type: 'cut', w: 2 }, { type: 'push', w: 0.5 }], durationBeats: 2, hardCutShare: 0.4 },
     typography: { style: 'informational', animations: ['fade', 'slide', 'mask_reveal', 'word_reveal'] }, color: 'DOCUMENTARY',
     sfx: { prefer: { transition: ['SWOOSH'], impact: ['IMPACT'], text: ['UI', 'TICK', 'DIGITAL'], ambience: ['AMBIENCE'] } }, music: { genres: ['DOCUMENTARY', 'CINEMATIC'], bpmRange: [60, 110] },
-    shots: { FULL_BLEED: 1, CROP_DETAIL: 0.5, STAT_SCENE: 0.7, CALLOUT: 0.7, MAP_SCENE: 0.3, HUD_SCENE: 0.2, END_CARD: 0.4 } }),
+    shots: { FULL_BLEED: 1, CROP_DETAIL: 0.5, STAT_SCENE: 0.7, CALLOUT: 0.7, MAP_SCENE: 0.3, HUD_SCENE: 0, IMPACT_SCENE: 0, FREEZE_FRAME: 0, END_CARD: 0.4 } }),
   T('commercial', 'Commercial', ['advert', 'advertisement', 'ad', 'promo'], 'Hero shots, controlled camera, premium transitions, clean type and colour.', {
     dials: { intensity: 0.55, cutFrequency: 0.45, velocity: 0.2, speedVariation: 0.2, camera: 0.5, motionBlur: 0.5, effects: 0.4, sfx: 0.45, transitions: 0.45, text: 0.5, color: 0.7, impact: 0.3, beatSync: 0.7, depth: 0.5, music: 0.55 },
     pacing: { shotSeconds: [1.5, 4], phrasing: 'bars', targetSeconds: 30 }, camera: { rig: 'CAMERA_PRODUCT' },

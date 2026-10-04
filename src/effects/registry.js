@@ -14,6 +14,7 @@ import { fx, T, key as keyOp } from './fx.js';
 import { COLOR_LOOK_ENTRIES } from '../color/looks.js';
 import { SHOT_TRANSITION_ENTRIES } from '../transitions/entries.js';
 import { TEXT_ANIM_ENTRIES } from '../typography/entries.js';
+import { COMPOSITING_ENTRIES } from '../compositing/entries.js';
 
 export { fx };
 
@@ -156,7 +157,7 @@ export const REGISTRY = {
 };
 
 // V4 additions live in their own modules and register here so one resolver serves everything.
-Object.assign(REGISTRY, COLOR_LOOK_ENTRIES, SHOT_TRANSITION_ENTRIES, TEXT_ANIM_ENTRIES);
+Object.assign(REGISTRY, COLOR_LOOK_ENTRIES, SHOT_TRANSITION_ENTRIES, TEXT_ANIM_ENTRIES, COMPOSITING_ENTRIES);
 
 /** Alternative effect chain used when a requested id doesn't exist. */
 export function unknownEffectFallback(id) {
