@@ -39,7 +39,7 @@ test('produce (simulator): from a folder + type + prompt to a validated, built, 
   assert.ok(d.beatMap && readJson(d.beatMap).bpm); assert.ok(readJson(d.directorReport).rationale.length === plan.timeline.shots.length);
   assert.equal(d.edit.qa.passed, true, JSON.stringify(d.edit.qa.errors));
   assert.ok(plan.audio.sfxEvents.length > 3, 'starter SFX pack used'); assert.ok(plan.timeline.shots.some((s) => s.layers.some((l) => l.remap)), 'speed ramps');
-  const report = fs.readFileSync(d.report, 'utf8'); assert.match(report, /SIMULATED/); assert.match(report, /does \*\*not\*\* prove anything about real After Effects/); assert.match(report, /## Shots/); assert.match(report, /virtual|BPM/);
+  const report = fs.readFileSync(d.report, 'utf8'); assert.doesNotMatch(report, /\[object Object\]|undefined|NaN/, 'no formatting accidents in the report'); assert.match(report, /\| QA \| passed/, 'the report shows the QA result of THIS run, also for a dry run'); assert.match(report, /"[^"]+" → /, 'the brief interpretation is spelled out'); assert.match(report, /SIMULATED/); assert.match(report, /does \*\*not\*\* prove anything about real After Effects/); assert.match(report, /## Shots/); assert.match(report, /virtual|BPM/);
   assert.ok(fs.existsSync(path.join(out, 'EDIT_REPORT.md')), 'report delivered to --output');
   for (const f of fs.readdirSync(input, { recursive: true })) assert.ok(!String(f).endsWith('.json'), 'the source folder is never written to');
 });

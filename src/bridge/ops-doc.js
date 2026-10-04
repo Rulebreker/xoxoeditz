@@ -9,7 +9,7 @@ export const OPS_DOC = {
   project_save: { group: 'project', args: '{path?}', doc: 'Save (Save As when path is given).' },
   folder_ensure: { group: 'project', args: '{path:"A/B"}', doc: 'Create nested project-panel folders if missing.' },
   import_ensure: { group: 'project', args: '{path, name?, folder?, sequence?}', doc: 'Idempotent import: reuses an existing item pointing at the same file; renames to `name`.' },
-  comp_ensure: { group: 'comp', args: '{name,width,height,fps,duration,pixelAspect?,bg?,folder?,reset?}', doc: 'Create or update a composition; reset:true removes all layers.' },
+  comp_ensure: { group: 'comp', args: '{name,width,height,fps,duration,pixelAspect?,bg?,folder?,reset?,motionBlur?,frameBlending?}', doc: 'Create or update a composition; reset:true removes all layers.' },
   comp_set: { group: 'comp', args: '{comp,duration?,motionBlur?,bg?,shutterAngle?}', doc: 'Adjust comp settings.' },
   comp_set_work_area: { group: 'comp', args: '{comp,start,duration}', doc: 'Set the work area.' },
   layers_clear: { group: 'comp', args: '{comp}', doc: 'Remove every layer in a comp.' },

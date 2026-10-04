@@ -77,7 +77,7 @@ export function compileTimeline(plan, { manifest, library = null, narration = nu
 
   // ---------- master comp ----------
   const wantsBlur = shots.some((s) => s.layers.some((l) => l.motionBlur || l.remap)) || trs.some((t) => ['whip', 'zoom', 'push', 'motion_blur'].includes(t.type));
-  stages.push({ id: 'comps', label: 'Master composition', units: [unit({ id: 'comp.master', label: MASTER, alternatives: [{ name: 'ensure', quality: 1, ops: [['comp_ensure', { name: MASTER, width: W, height: H, fps, duration: end, bg: '#000000', folder: '00_MASTER', reset: !incremental, motionBlur: wantsBlur }]] }] })] });
+  stages.push({ id: 'comps', label: 'Master composition', units: [unit({ id: 'comp.master', label: MASTER, alternatives: [{ name: 'ensure', quality: 1, ops: [['comp_ensure', { name: MASTER, width: W, height: H, fps, duration: end, bg: '#000000', folder: '00_MASTER', reset: !incremental, motionBlur: wantsBlur, frameBlending: shots.some((s) => s.layers.some((l) => l.remap && l.remap.frameBlend !== 'none')) }]] }] })] });
 
   // ---------- shots ----------
   const layout = []; // z-order bookkeeping: [{shot, layers:[names], matteAfter}]

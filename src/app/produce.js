@@ -181,7 +181,7 @@ export function produceVideo(ctx, opts = {}) {
       if (memoryEnabled(ctx.config, memCfg, ctx.env)) { try { const plan = readJson(p.plan); const m = loadMemory(ctx.config); recordRun(m, { project: name, type: directive.typeId, seed: plan.seed, score: (creative || readJson(p.creativeQa, {})).score, plan }); saveMemory(ctx.config, m); } catch { /* memory is optional */ } }
     }
     if (outDir) { ensureDir(outDir); if (render?.success && render.data.output && fs.existsSync(render.data.output)) { delivered = path.join(outDir, `${baseProject}${quality === 'final' ? '' : '_' + quality}${path.extname(render.data.output)}`); fs.copyFileSync(render.data.output, delivered); } }
-    const reportFile = writeEditReport(ctx, name, { directive, config, quality, steps, edit, render, mock, delivered, outDir, scan: scan.data, director: dir.data, creative: creative || readJson(p.creativeQa, null) });
+    const reportFile = writeEditReport(ctx, name, { directive, config, quality, steps, edit, render, mock, delivered, outDir, scan: scan.data, director: dir.data, creative: creative || readJson(p.creativeQa, null), dryRun: Boolean(opts.dryRun) });
     const success = Boolean(edit.success) && (render === null || render.success);
     return { success, operation: 'produce', data: { project: name, projectDir: p.root, plan: p.plan, aep: p.aep, qa: p.qa, beatMap: fs.existsSync(p.beatMap) ? p.beatMap : null, directorReport: p.directorReport, report: reportFile, output: delivered || render?.data?.output || null, rendered: Boolean(render?.success), simulated: mock, steps, edit: edit.data, render: render?.data || null, creativeQa: fs.existsSync(p.creativeQa) ? p.creativeQa : null, creative: creative ? { score: creative.score, level: creative.level } : readJson(p.creativeQa, null) && { score: readJson(p.creativeQa).score, level: 'plan' } }, ...(success ? {} : { error: !edit.success ? `build/QA: ${edit.error}` : `render: ${render.error}`, recoverable: true }) };
   });
@@ -192,15 +192,16 @@ const fmt = (n, d = 2) => (typeof n === 'number' ? n.toFixed(d) : String(n ?? ''
 const row = (cells) => `| ${cells.map((c) => String(c ?? '').replace(/\|/g, '/').replace(/\n/g, ' ')).join(' | ')} |`;
 
 /** EDIT_REPORT.md: what was made, how it was decided, and - above all - what was and was not actually verified. */
-export function writeEditReport(ctx, name, { directive, config, quality, steps, edit, render, mock, delivered, outDir, scan, director, creative = null }) {
+export function writeEditReport(ctx, name, { directive, config, quality, steps, edit, render, mock, delivered, outDir, scan, director, creative = null, dryRun = false }) {
   const p = projectPaths(ctx.config, name);
-  const plan = readJson(p.plan, null); const dr = readJson(p.directorReport, null); const qa = readJson(p.qa, null);
+  const plan = readJson(p.plan, null); const dr = readJson(p.directorReport, null);
+  const qa = readJson(S.pathsFor(ctx, name, { dryRun }).qa, null); // a dry run keeps its QA apart from a real build's
   const L = [];
   const status = mock ? 'SIMULATED — nothing was rendered' : render?.success ? 'REAL After Effects build, rendered and verified' : edit.success ? 'REAL After Effects build; not rendered' : 'FAILED';
   L.push(`# Edit report: ${name}`, '', `**Status: ${status}**`, '');
   if (mock) L.push('> This run used the built-in simulator (`--dry-run` or `transport: mock`). It proves the plan, the compile and the host scripts\' arguments are consistent. It does **not** prove anything about real After Effects behaviour, and **no video file exists**.', '');
   L.push('## Result', row(['Item', 'Value']), row(['---', '---']), row(['Edit type', `${directive.typeId} (${directive.typeSource})`]), row(['Quality tier', quality]), row(['Duration', plan ? `${fmt(plan.timeline.duration, 1)} s` : '?']), row(['Output', plan ? `${plan.output.width}x${plan.output.height} @ ${plan.output.fps} fps` : '?']), row(['Video', delivered || render?.data?.output || (mock ? 'none (simulated)' : 'not rendered')]), row(['After Effects project', p.aep]), row(['QA', qa ? `${qa.passed ? 'passed' : 'FAILED'} — ${qa.summary}` : 'not run']), '');
-  L.push('## How the brief was read', directive.explanation?.length ? directive.explanation.map((e) => `- ${e}`).join('\n') : '- (no special instructions found in the prompt)', '');
+  L.push('## How the brief was read', directive.explanation?.length ? directive.explanation.map((e) => (typeof e === 'string' ? `- ${e}` : `- "${e.phrase}" → ${e.effect}`)).join('\n') : '- (no special instructions found in the prompt)', '');
   const dials = plan?.directive?.dials || directive.dials;
   L.push('## Behaviour dials (0–1) and where each came from', row(['Dial', 'Value', 'Source']), row(['---', '---', '---']), ...Object.entries(dials).map(([k, v]) => row([k, fmt(v), plan?.directive?.sources?.[k] || directive.sources?.[k] || ''])), '');
   if (plan) {

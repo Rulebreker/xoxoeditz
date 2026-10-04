@@ -177,6 +177,7 @@ XOXO.op("comp_set", function (a) {
   var comp = XOXO.getComp(a.comp);
   if (a.duration !== undefined) comp.duration = a.duration;
   if (a.motionBlur !== undefined) comp.motionBlur = !!a.motionBlur;
+  if (a.frameBlending !== undefined) { try { comp.frameBlending = !!a.frameBlending; } catch (eFb) { /* older versions: layer switch only */ } }
   if (a.bg) comp.bgColor = XOXO.color(a.bg);
   if (a.shutterAngle !== undefined) comp.shutterAngle = a.shutterAngle;
   return { duration: comp.duration };

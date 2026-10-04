@@ -129,8 +129,11 @@ XOXO.op("time_remap", function (a) {
   if (a.start !== undefined) layer.inPoint = a.start;
   if (a.end !== undefined) layer.outPoint = a.end;
   if (a.frameBlend) {
+    // frameBlendingType only has an effect while the layer's Frame Blending switch is on (and the comp's master switch)
     try {
-      layer.frameBlendingType = (a.frameBlend === "pixel") ? FrameBlendingType.PIXEL_MOTION : ((a.frameBlend === "mix") ? FrameBlendingType.FRAME_MIX : FrameBlendingType.NO_FRAME_BLEND);
+      layer.frameBlending = (a.frameBlend !== "none");
+      if (a.frameBlend !== "none") layer.frameBlendingType = (a.frameBlend === "pixel") ? FrameBlendingType.PIXEL_MOTION : FrameBlendingType.FRAME_MIX;
+      else layer.frameBlendingType = FrameBlendingType.NO_FRAME_BLEND;
     } catch (e2) { warnings.push("frame blending not applied: " + e2.message); }
   }
   if (a.motionBlur) { try { layer.motionBlur = true; } catch (e3) { warnings.push("motion blur not applied: " + e3.message); } }
