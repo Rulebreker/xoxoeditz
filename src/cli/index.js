@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import * as S from '../app/services.js';
 import { produceVideo, directProject, beatsFor } from '../app/produce.js';
+import { critiqueProject, promoteProject, memoryCommand } from '../app/creative.js';
 import { formatProduce, formatDoctor, formatEdit, formatQa, formatStatus, formatEffects, formatRender, formatGeneric, red, green, dim, bold } from './format.js';
 import { readJson, writeJson, ensureDir } from '../core/paths.js';
 import { synthesizeSfx, SYNTH } from '../audio/synth.js';
@@ -24,6 +25,9 @@ ${bold('Everyday workflow')}
                                      AUTONOMOUS: scan, direct (music, beats, shots, velocity, camera, SFX, type), build, QA, render
          [--quality draft|preview|final --duration 30 --seed N --professional --music auto|off|<file> --config edit.config.json --dry-run]
   xoxo direct [name] [--seed N --type T --prompt "..."]    re-run only the Director on a scanned project (writes plan.json)
+  xoxo critique [name] [--render file | --last]          creative QA: slideshow? zoom-only? cuts on the beat? sound? black frames? -> CREATIVE_QA.json
+  xoxo promote <name> --to final|preview|draft           re-use an approved tier's plan at another resolution (draft/preview/final are separate projects)
+  xoxo memory [show|reset|like <id>|dislike <id>]         local taste memory (ids and counts only)
   xoxo beats <audio> [--out beat_map.json]                 BPM, beats, downbeats, drops, breaks, rises, impacts, sections
   xoxo edit [name] [--dry-run]       build the project in After Effects from plan.json (+ QA + auto-repair)
   xoxo verify [name]                 re-run QA on the saved project
@@ -58,7 +62,7 @@ const OPTIONS = {
   preview: { type: 'boolean' }, range: { type: 'string' }, ame: { type: 'boolean' }, 'keep-intermediate': { type: 'boolean' },
   target: { type: 'string' }, out: { type: 'string' }, verbose: { type: 'boolean', short: 'v' },
   prompt: { type: 'string' }, output: { type: 'string' }, seed: { type: 'string' }, quality: { type: 'string' }, duration: { type: 'string' }, professional: { type: 'boolean' },
-  music: { type: 'string' }, config: { type: 'string' }, 'starter-sfx': { type: 'boolean' }, name: { type: 'string' }, intensity: { type: 'string' }, sfx: { type: 'string' },
+  music: { type: 'string' }, config: { type: 'string' }, to: { type: 'string' }, render: { type: 'string' }, last: { type: 'boolean' }, refine: { type: 'string' }, remember: { type: 'boolean' }, 'starter-sfx': { type: 'boolean' }, name: { type: 'string' }, intensity: { type: 'string' }, sfx: { type: 'string' },
 };
 
 function emit(opts, r, formatter) {
@@ -125,13 +129,16 @@ export async function main(argv) {
         if (autonomous) {
           if (!o.assets) { console.error('usage: xoxo edit --assets <folder> --type <type> --prompt "..." [--output <folder>]'); return 2; }
           const num = (v) => (v === undefined ? undefined : Number(v));
-          const r = await produceVideo(ctx, { assets: o.assets, type: o.type, prompt: o.prompt, output: o.output, config: o.config, name: o.name, seed: num(o.seed), quality: o.quality, duration: num(o.duration), professional: o.professional || undefined, music: o.music === 'off' ? false : o.music, sfx: o.sfx === 'off' ? false : o.sfx, intensity: num(o.intensity), style: o.style, title: o.title, resolution: o.resolution, aspect: o.aspect, fps: num(o.fps), captions: o.captions ? true : undefined, dryRun: o['dry-run'], render: !o['no-render'], verify: !o['no-verify'], repair: !o['no-repair'], starterSfx: o['starter-sfx'], force: o.force, onProgress: o.json ? undefined : (e) => process.stderr.write(dim(`  → ${e.message}\n`)) });
+          const r = await produceVideo(ctx, { assets: o.assets, type: o.type, prompt: o.prompt, output: o.output, config: o.config, name: o.name, seed: num(o.seed), quality: o.quality, duration: num(o.duration), professional: o.professional || undefined, music: o.music === 'off' ? false : o.music, sfx: o.sfx === 'off' ? false : o.sfx, intensity: num(o.intensity), style: o.style, title: o.title, resolution: o.resolution, aspect: o.aspect, fps: num(o.fps), captions: o.captions ? true : undefined, dryRun: o['dry-run'], render: !o['no-render'], verify: !o['no-verify'], repair: !o['no-repair'], starterSfx: o['starter-sfx'], force: o.force, remember: o.remember, onProgress: o.json ? undefined : (e) => process.stderr.write(dim(`  → ${e.message}\n`)) });
           return emit(o, r, formatProduce);
         }
         const r = await S.editProject(ctx, name, { dryRun: o['dry-run'], verify: !o['no-verify'], repair: !o['no-repair'], onProgress: progress });
         return emit(o, r, formatEdit);
       }
       case 'direct': return emit(o, await directProject(ctx, name, { type: o.type, prompt: o.prompt, seed: o.seed === undefined ? undefined : Number(o.seed), duration: o.duration === undefined ? undefined : Number(o.duration), professional: o.professional || undefined, dryRun: o['dry-run'], starterSfx: o['starter-sfx'], log: o.json ? undefined : (m) => process.stderr.write(dim(`  → ${m}\n`)) }), (d) => `${green('✓')} ${d.shots} shots, ${d.duration}s @ ${Math.round(d.bpm)} BPM (${d.editType})  -> ${d.plan}\n  templates: ${Object.entries(d.templates).map(([k, v]) => `${k}×${v}`).join(', ')}\n${(d.warnings || []).map((w) => '  ' + red('!') + ' ' + w).join('\n')}`);
+      case 'critique': return emit(o, await critiqueProject(ctx, name, { file: o.render, last: o.last }), (d) => `${d.passed ? green('CREATIVE QA PASSED') : red('CREATIVE QA FAILED')} — ${d.summary}  (${d.level})\n${Object.entries(d.categories).map(([k, v]) => `  ${k.padEnd(12)} ${v}`).join('\n')}\n${[...d.errors, ...d.warnings].slice(0, 20).map((i) => `  ${i.severity === 'error' ? red('error') : 'warn '} ${i.code}: ${i.message}`).join('\n')}\n  ${dim(d.file)}`);
+      case 'promote': { if (!name) { console.error('usage: xoxo promote <project> --to final|preview|draft'); return 2; } return emit(o, await promoteProject(ctx, name, { to: o.to || 'final', finalResolution: o.resolution }), (d) => `${green('✓')} ${d.from} (${d.fromTier}) -> ${d.to} at ${d.output}\n  next: ${d.next}`); }
+      case 'memory': { const action = name || 'show'; return emit(o, await memoryCommand(ctx, action, pos.slice(1)), (d) => d.rated ? d.rated.map((r) => `${green('✓')} ${r.id}: ${r.rating}`).join('\n') : d.reset !== undefined ? `${green('✓')} memory ${d.reset ? 'cleared' : 'could not be cleared'} (${d.file})` : `memory ${d.enabled ? 'on' : 'OFF'} — ${d.runs} runs, ${Object.keys(d.ratings).length} ratings\n${d.recentRuns.map((r) => `  ${r.at.slice(0, 16)} ${r.project} ${r.type} seed ${r.seed} score ${r.score}`).join('\n')}\n  ${dim(d.note)}`); }
       case 'beats': {
         if (!name) { console.error('usage: xoxo beats <audio file> [--out beat_map.json]'); return 2; }
         return emit(o, await beatsFor(ctx, name, { out: o.out }), (d) => `${green('✓')} ${d.bpm} BPM (confidence ${d.confidence}), ${d.beats} beats, ${d.downbeats} downbeats, ${d.bars} bars\n  drops: ${d.drops.map((x) => x.t.toFixed(2) + 's').join(', ') || 'none'}   breaks: ${d.breaks.map((x) => x.start.toFixed(1) + '–' + x.end.toFixed(1) + 's').join(', ') || 'none'}   rises: ${d.rises.map((x) => x.start.toFixed(1) + '→' + x.end.toFixed(1) + 's').join(', ') || 'none'}\n  sections: ${d.sections.map((x) => `${x.kind} ${x.start.toFixed(1)}–${x.end.toFixed(1)}s`).join(' | ')}${d.out ? '\n  saved: ' + d.out : ''}`);

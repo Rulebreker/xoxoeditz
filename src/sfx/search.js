@@ -88,7 +88,7 @@ export function searchLibrary(manifest, query, ctx = {}) {
     if (duration && a.duration) { const ratio = a.duration / duration; r.duration = (ratio >= 0.6 && ratio <= 1.6 ? 1 : ratio > 1.6 ? Math.max(0, 1 - (ratio - 1.6) / 4) : Math.max(0, ratio / 0.6)) * 0.12; } else r.duration = 0;
     r.editType = editType && (a.recommended_for || []).includes(editType) ? 0.12 : 0;
     r.category = prefer.size && prefer.has((a.subcategory || '').toUpperCase()) ? 0.16 : 0;
-    r.diversity = -0.14 * (use[a.id] || 0);
+    r.diversity = use[a.id] ? -0.14 * use[a.id] : 0; // never -0: plans are compared and serialised
     r.memory = 0.08 * (memory[a.id] || 0);
     const score = Object.values(r).reduce((x, y) => x + y, 0);
     if (score < minScore) continue;

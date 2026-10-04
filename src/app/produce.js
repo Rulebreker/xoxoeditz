@@ -22,6 +22,10 @@ import { directTimeline } from '../director/direct.js';
 import { validateTimeline } from '../timeline/plan.js';
 import { ident } from '../core/paths.js';
 import { refreshHostCapabilities } from '../ae/build.js';
+import { refineDirection } from '../creative-qa/refine.js';
+import { critiquePlan, critiqueRender, writeCreativeQa } from '../creative-qa/index.js';
+import { loadMemory, saveMemory, memoryBias, memoryEnabled, recordRun } from '../memory/index.js';
+import { tierName } from './tiers.js';
 
 const defined = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined && v !== null));
 const QUALITY_RES = { draft: '480p', preview: '720p' };
@@ -86,16 +90,23 @@ export function directProject(ctx, name, opts = {}) {
     const log = opts.log || (() => {});
     const inputs = await prepareInputs(ctx, n, directive, opts, log);
     const hostCaps = opts.hostCaps || await hostCapabilities(ctx, Boolean(opts.dryRun), log);
-    const { plan, report } = directTimeline({ directive, manifest: inputs.manifest, library: inputs.library, beatMap: inputs.beatMap, music: inputs.music, caps: hostCaps });
+    const useMemory = memoryEnabled(ctx.config, cfg, ctx.env);
+    const memory = useMemory ? memoryBias(loadMemory(ctx.config)) : null;
+    const input = { directive, manifest: inputs.manifest, library: inputs.library, beatMap: inputs.beatMap, music: inputs.music, caps: hostCaps, memory };
+    const rounds = opts.refine ?? (cfg.quality === 'draft' ? 2 : 4);
+    const refined = refineDirection(input, { rounds });
+    const { plan, report } = refined;
+    const critique = refined.critique;
+    log(`creative QA of the plan: score ${critique.score}, ${critique.errors.length} errors, ${critique.warnings.length} warnings${refined.attempts.length > 1 ? ` (best of ${refined.attempts.length} cuts: seed ${refined.chosen})` : ''}`);
     const v = validateTimeline(plan, { manifest: inputs.manifest, library: inputs.library });
     if (!v.valid) return fail('direct', `the Director produced an invalid plan:\n${v.errors.slice(0, 8).map((e) => `  - ${e.path}: ${e.message}`).join('\n')}`, { code: 'PLAN_INVALID', data: { errors: v.errors } });
-    writeJson(p.plan, plan); writeJson(p.directorReport, report);
+    writeJson(p.plan, plan); writeJson(p.directorReport, report); writeCreativeQa(p.creativeQa, critique);
     // keep a project-local copy of every library asset the plan refers to: the plan then survives library changes
     const refs = new Set([...plan.audio.music.map((m) => m.asset), ...plan.audio.sfxEvents.map((e) => e.assetId), ...plan.timeline.transitions.map((t) => t.overlayAsset), ...plan.timeline.shots.flatMap((s) => s.layers.map((l) => l.asset))].filter(Boolean));
     const used = (inputs.library?.assets || []).filter((a) => refs.has(a.id));
     if (used.length) writeJson(p.libraryUsed, { version: 1, generatedAt: new Date().toISOString(), assets: used }); else fs.rmSync(p.libraryUsed, { force: true });
     writeJson(p.state, { ...state, editType: directive.typeId, prompt: directive.prompt, editConfig: cfg });
-    return { plan: p.plan, report: p.directorReport, shots: plan.timeline.shots.length, duration: plan.timeline.duration, bpm: plan.timeline.bpm, editType: directive.typeId, why: directive.explanation, templates: report.templates, warnings: report.warnings, music: report.music };
+    return { plan: p.plan, report: p.directorReport, creativeQa: p.creativeQa, creative: { score: critique.score, errors: critique.errors.length, warnings: critique.warnings.length, attempts: refined.attempts, chosenSeed: refined.chosen }, shots: plan.timeline.shots.length, duration: plan.timeline.duration, bpm: plan.timeline.bpm, editType: directive.typeId, why: directive.explanation, templates: report.templates, warnings: report.warnings, music: report.music };
   });
 }
 
@@ -128,7 +139,8 @@ export function produceVideo(ctx, opts = {}) {
     for (const w of loaded.warnings) log(`config warning: ${w}`);
 
     // 2. project
-    const name = slug(opts.name || directive.title || path.basename(opts.output ? path.resolve(opts.output) : assetsDir) || `${directive.typeId}-edit`, `${directive.typeId}-edit`);
+    const baseProject = slug(opts.name || directive.title || path.basename(opts.output ? path.resolve(opts.output) : assetsDir) || `${directive.typeId}-edit`, `${directive.typeId}-edit`);
+    const name = tierName(baseProject, quality); // draft and preview are separate projects: a throwaway draft never touches a final
     const created = await S.newProject(ctx, name, { assets: assetsDir }); if (!created.success) return created;
     const scan = await S.scanProject(ctx, name, { dir: assetsDir }); if (!scan.success) return scan;
     log(`scanned ${Object.values(scan.data.counts).reduce((a, b) => a + b, 0)} files ${JSON.stringify(scan.data.counts)}`);
@@ -139,7 +151,7 @@ export function produceVideo(ctx, opts = {}) {
     // 3. direct
     const dir = await directProject(ctx, name, { type: directive.typeId, prompt: directive.prompt, overrides: opts.overrides, seed: config.seed, log, starterSfx: opts.starterSfx, dryRun: opts.dryRun });
     if (!dir.success) return dir;
-    log(`directed: ${dir.data.shots} shots, ${dir.data.duration}s @ ${Math.round(dir.data.bpm)} BPM (${Object.entries(dir.data.templates).map(([k, v]) => `${k}×${v}`).join(', ')})`);
+    log(`directed [${quality}]: ${dir.data.shots} shots, ${dir.data.duration}s @ ${Math.round(dir.data.bpm)} BPM (${Object.entries(dir.data.templates).map(([k, v]) => `${k}×${v}`).join(', ')})`);
 
     // 4. build + QA + repair
     const edit = await S.editProject(ctx, name, { dryRun: Boolean(opts.dryRun), verify: opts.verify !== false, repair: opts.repair !== false, onProgress: (e) => { if (e.status === 'start') log(`build: ${e.label}`); } });
@@ -153,13 +165,25 @@ export function produceVideo(ctx, opts = {}) {
       log(`render: ${render.success ? render.data.output : 'FAILED: ' + render.error}`);
     } else if (mock) log('render skipped: the simulator builds the plan but renders nothing');
 
-    // 6. report + deliver
+    // 6. creative QA of the render (real renders only), memory, report + deliver
     const outDir = opts.output ? path.resolve(opts.output) : null;
-    let delivered = null;
-    if (outDir) { ensureDir(outDir); if (render?.success && render.data.output && fs.existsSync(render.data.output)) { delivered = path.join(outDir, `${name}${quality === 'final' ? '' : '_' + quality}${path.extname(render.data.output)}`); fs.copyFileSync(render.data.output, delivered); } }
-    const reportFile = writeEditReport(ctx, name, { directive, config, quality, steps, edit, render, mock, delivered, outDir, scan: scan.data, director: dir.data });
+    let delivered = null; let creative = null;
+    if (render?.success && render.data.output && fs.existsSync(render.data.output)) {
+      try {
+        const plan = readJson(p.plan); const meta = await probeFile(render.data.output, 'video', ctx.config);
+        creative = await critiqueRender(ctx.config, plan, render.data.output, { manifest: readJson(p.manifest), library: loadLibraryManifest(ctx.config) }, { width: meta.width, height: meta.height, duration: meta.duration, hasAudio: meta.hasAudio });
+        writeCreativeQa(p.creativeQa, creative);
+        log(`creative QA of the render: score ${creative.score}, ${creative.errors.length} errors, ${creative.warnings.length} warnings`);
+      } catch (e) { log(`creative QA of the render could not run: ${e.message}`); }
+    }
+    if ((!mock || opts.remember) && edit.success && edit.data) {
+      const memCfg = readJson(p.state, {}).editConfig || {};
+      if (memoryEnabled(ctx.config, memCfg, ctx.env)) { try { const plan = readJson(p.plan); const m = loadMemory(ctx.config); recordRun(m, { project: name, type: directive.typeId, seed: plan.seed, score: (creative || readJson(p.creativeQa, {})).score, plan }); saveMemory(ctx.config, m); } catch { /* memory is optional */ } }
+    }
+    if (outDir) { ensureDir(outDir); if (render?.success && render.data.output && fs.existsSync(render.data.output)) { delivered = path.join(outDir, `${baseProject}${quality === 'final' ? '' : '_' + quality}${path.extname(render.data.output)}`); fs.copyFileSync(render.data.output, delivered); } }
+    const reportFile = writeEditReport(ctx, name, { directive, config, quality, steps, edit, render, mock, delivered, outDir, scan: scan.data, director: dir.data, creative: creative || readJson(p.creativeQa, null) });
     const success = Boolean(edit.success) && (render === null || render.success);
-    return { success, operation: 'produce', data: { project: name, projectDir: p.root, plan: p.plan, aep: p.aep, qa: p.qa, beatMap: fs.existsSync(p.beatMap) ? p.beatMap : null, directorReport: p.directorReport, report: reportFile, output: delivered || render?.data?.output || null, rendered: Boolean(render?.success), simulated: mock, steps, edit: edit.data, render: render?.data || null }, ...(success ? {} : { error: !edit.success ? `build/QA: ${edit.error}` : `render: ${render.error}`, recoverable: true }) };
+    return { success, operation: 'produce', data: { project: name, projectDir: p.root, plan: p.plan, aep: p.aep, qa: p.qa, beatMap: fs.existsSync(p.beatMap) ? p.beatMap : null, directorReport: p.directorReport, report: reportFile, output: delivered || render?.data?.output || null, rendered: Boolean(render?.success), simulated: mock, steps, edit: edit.data, render: render?.data || null, creativeQa: fs.existsSync(p.creativeQa) ? p.creativeQa : null, creative: creative ? { score: creative.score, level: creative.level } : readJson(p.creativeQa, null) && { score: readJson(p.creativeQa).score, level: 'plan' } }, ...(success ? {} : { error: !edit.success ? `build/QA: ${edit.error}` : `render: ${render.error}`, recoverable: true }) };
   });
 }
 
@@ -168,7 +192,7 @@ const fmt = (n, d = 2) => (typeof n === 'number' ? n.toFixed(d) : String(n ?? ''
 const row = (cells) => `| ${cells.map((c) => String(c ?? '').replace(/\|/g, '/').replace(/\n/g, ' ')).join(' | ')} |`;
 
 /** EDIT_REPORT.md: what was made, how it was decided, and - above all - what was and was not actually verified. */
-export function writeEditReport(ctx, name, { directive, config, quality, steps, edit, render, mock, delivered, outDir, scan, director }) {
+export function writeEditReport(ctx, name, { directive, config, quality, steps, edit, render, mock, delivered, outDir, scan, director, creative = null }) {
   const p = projectPaths(ctx.config, name);
   const plan = readJson(p.plan, null); const dr = readJson(p.directorReport, null); const qa = readJson(p.qa, null);
   const L = [];
@@ -187,6 +211,11 @@ export function writeEditReport(ctx, name, { directive, config, quality, steps, 
       L.push(row([s.id, `${fmt(s.start)}–${fmt(s.end)}`, s.template, s.assets.main || '—', s.camera ? `${s.camera.move}` : '—', rm ? rm.remap.summary.slice(0, 70) : '1x', tr ? `${tr.type}${tr.d ? ' ' + fmt(tr.d) + 's' : ''}` : '', s.text.map((t) => `${t.text} (${t.animation})`).join('; ')]));
     });
     L.push('', `## Sound design`, `${plan.audio.sfxEvents.length} sound events (${[...new Set(plan.audio.sfxEvents.map((e) => e.role))].join(', ') || 'none'}). ${dr?.sound?.dropped ? dr.sound.dropped + ' candidates dropped (budget / simultaneity).' : ''}`, '');
+  }
+  if (creative) {
+    L.push(`## Creative QA (${creative.level})`, `Score **${creative.score}** — ${creative.summary}`, '', row(['Category', 'Score']), row(['---', '---']), ...Object.entries(creative.categories || {}).map(([k, v]) => row([k, v])), '');
+    const items = [...(creative.errors || []), ...(creative.warnings || [])].slice(0, 20); if (items.length) L.push(...items.map((i) => `- **${i.severity}** ${i.code}: ${i.message}`), '');
+    if (creative.refinement) L.push(`Refinement: ${creative.refinement.attempts.length} cut(s) tried, seed ${creative.refinement.chosenSeed} chosen${creative.refinement.improved ? ' (better than the first)' : ''}. ${creative.refinement.note}`, '');
   }
   const fb = edit.data?.build?.fallbacksUsed || [];
   L.push('## Fallbacks and degradations', fb.length ? fb.map((f) => `- ${f.effect || f.label}: used "${f.using}" (quality ${f.quality}) — ${(f.reasons || [])[0] || ''}`).join('\n') : '- none', '');

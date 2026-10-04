@@ -39,7 +39,8 @@ export function planTransitions(shots, o = {}) {
   if (overlayAssets.length && palette.some((p) => p.type === 'light')) palette.push({ type: 'light_leak', w: palette.find((p) => p.type === 'light').w * 0.8 });
   const total = palette.reduce((a, p) => a + p.w, 0) || 1;
   const cutShare = palette.filter((p) => p.type === 'cut').reduce((a, p) => a + p.w, 0) / total;
-  const pCut = noTransitions ? 1 : clamp((0.5 * (spec.hardCutShare ?? 0.2) + 0.5 * cutShare) * (1.3 - td), 0.04, 0.88);
+  // restrained edits (low dial) cut more often, adventurous ones less: +-0.15 around the palette's own cut share
+  const pCut = noTransitions ? 1 : clamp(0.5 * (spec.hardCutShare ?? 0.2) + 0.5 * cutShare + 0.6 * (0.5 - td), 0.04, 0.88);
 
   for (let i = 0; i < shots.length - 1; i++) {
     const a = shots[i]; const b = shots[i + 1]; const tc = a.end;
@@ -55,7 +56,7 @@ export function planTransitions(shots, o = {}) {
         if (shortest < meta.minShot) return null;                               // shots too short for this transition
         w *= 0.4 + 1.2 * td;                                                    // the dial scales how adventurous we are
         const q = transitionQuality(p.type, caps); w *= 0.15 + 0.85 * q * q;    // prefer what this machine renders properly
-        if (history.slice(-2).includes(p.type)) w *= 0.05;                      // no repeats
+        if (history.slice(-2).includes(p.type)) w *= 0.001;                     // no repeats (practically excluded; only chosen when nothing else fits)
         else if (history.length && TRANSITION_META[history[history.length - 1]].family === meta.family) w *= 0.5;
         if (isChapter) w *= ADVANCED.includes(p.type) ? 2.5 : p.type === 'dissolve' ? 0.2 : 1;
         return w > 0 ? { type: p.type, w } : null;
