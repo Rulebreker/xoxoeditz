@@ -21,7 +21,7 @@ export const RULES = [
   { id: 'fast', re: /\b(fast|quick|rapid|snappy|energetic|high[- ]energy|punchy|dynamic|fast[- ]paced)\b/, d: { cutFrequency: 0.2, intensity: 0.1, sfx: 0.08 }, note: 'faster cutting' },
   { id: 'slow', re: /\b(slow|calm|relaxed|gentle|slow[- ]paced|peaceful|serene|contemplative)\b/, d: { cutFrequency: -0.25, velocity: -0.2, camera: -0.1, intensity: -0.18, impact: -0.15, sfx: -0.1 }, note: 'slower, calmer pacing' },
   { id: 'cinematic', re: /\bcinematic\b/, d: { camera: 0.05, depth: 0.2, color: 0.1 }, color: 'CINEMATIC', rig: 'CAMERA_CINEMATIC', flags: { letterboxHint: true }, note: 'cinematic camera, depth and grade' },
-  { id: 'clean', re: /\b(clean|simple|minimal|uncluttered|restrained|understated)\b/, d: { effects: -0.2, text: -0.08, transitions: -0.1 }, color: 'CLEAN', note: 'clean, uncluttered treatment' },
+  { id: 'clean', re: /\b(clean|simple|minimal(?!\s+(?:sound|sfx|audio|music))|uncluttered|restrained|understated)\b/, d: { effects: -0.2, text: -0.08, transitions: -0.1 }, color: 'CLEAN', note: 'clean, uncluttered treatment' },
   { id: 'dark', re: /\b(dark|moody|noir|gritty|ominous|menacing)\b/, color: 'DARK', d: { color: 0.15 }, note: 'dark, moody grade' },
   { id: 'vibrant', re: /\b(vibrant|colou?rful|neon|saturated|bold colou?rs)\b/, color: 'VIBRANT', d: { color: 0.15 }, note: 'vibrant colour' },
   { id: 'military', re: /\b(military|j-?20|fighter|jet|aircraft|warplane|army|navy|air force|missile|tactical)\b/, color: 'MILITARY', hintType: 'military', note: 'military subject: stark grade, HUD vocabulary' },

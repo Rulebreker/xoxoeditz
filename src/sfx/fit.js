@@ -11,6 +11,7 @@ import { round } from '../core/time.js';
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 export const ALIGN = { impact: 'peak', hit: 'peak', big_impact: 'peak', camera: 'peak', text: 'peak', tick: 'peak', ui: 'peak', glitch: 'peak', drop: 'peak', transition: 'peak', whip: 'peak', soft_transition: 'peak', riser: 'end', reverse: 'end', swell: 'end', ambience: 'start', vehicle: 'peak', weapon: 'peak' };
 export const BASE_GAIN_DB = { big_impact: -6, impact: -8, drop: -6, hit: -10, camera: -12, transition: -11, whip: -10, soft_transition: -14, riser: -14, reverse: -14, swell: -16, text: -17, ui: -17, tick: -19, glitch: -13, ambience: -26, vehicle: -14, weapon: -9 };
+export const PEAK_CEILING_DB = -6; // dBFS: leaves room for the music bed and simultaneous sounds in the sum
 export const TARGET_RMS_DB = -22; // loudness every SFX is normalised to before the role gain is applied
 
 /**
@@ -56,8 +57,8 @@ export function planSfxFit(asset, ev, opts = {}) {
   const dial = opts.sfxDial ?? 0.5;
   const inten = ev.intensity ?? asset.intensity ?? 0.6;
   let gainDb = round(clamp((BASE_GAIN_DB[role] ?? -12) + norm + (dial - 0.5) * 8 + (inten - 0.6) * 5, -40, -2), 1);
-  // never let the sound's own peak, after the gain, come within 3 dB of full scale
-  if (f.peakDb !== undefined && f.peakDb + gainDb > -3) { gainDb = round(-3 - f.peakDb, 1); notes.push('gain reduced to keep the peak below -3 dBFS'); }
+  // headroom for the mix: the sound's own peak, after the gain, stays below PEAK_CEILING_DB (music and other SFX add to it)
+  if (f.peakDb !== undefined && f.peakDb + gainDb > PEAK_CEILING_DB) { gainDb = round(PEAK_CEILING_DB - f.peakDb, 1); notes.push(`gain reduced to keep the peak below ${PEAK_CEILING_DB} dBFS`); }
 
   const layers = [{ part: 'main', start: round(start, 4), sourceIn: round(sourceIn, 4), sourceOut: round(sourceOut, 4), stretch, fadeIn: round(fadeIn, 4), fadeOut: round(fadeOut, 4), gainDb, assetId: asset.id }];
   return { role, assetId: asset.id, at: round(ev.at, 4), align, alignedPeak: round(start + peakT, 4), start: round(start, 4), end: round(start + playLen * stretch, 4), layers, notes, needsFile: trimmedTail && opts.preferFile === true };

@@ -39,9 +39,20 @@ What each layer of evidence covers:
 | File-bridge transports (one-shot cold start/forwarding, listener, timeouts, missing-permission failure) | Automated tests with a fake single-instance `AfterFX` |
 | **Behaviour inside real After Effects** (property match names, text animator & shape trim paths, effect parameter names, `Allow Scripts…` detection, template names, `aerender` flags, Windows launch semantics) | **Not yet verified by the author.** Written against the documented API; risky spots are wrapped in fallbacks. Run `xoxo doctor --connect` and `xoxo selftest`. |
 
+**Autonomous engine, additionally unverified in real After Effects:** `time_remap` (Time Remapping enable/keys/frame blending),
+`layers_reorder` on 100+ layers, `track_matte`, `mask_add` on cropped footage, text animator `Based On = Words`
+(`ADBE Text Range Type2`), and the parameter names used for `ADBE Motion Blur` (Directional Blur: `Direction`, `Blur Length`),
+`CC Radial Fast Blur` (`Type`, `Amount`), `ADBE Exposure2`, `ADBE Wave Warp`, `ADBE Ramp`, `ADBE HUE SATURATION`
+(`Master Saturation`), `ADBE Brightness & Contrast 2`. All are wrapped in fallbacks. `xoxo benchmark velocity` exercises every one.
+
 If something fails on your version, `build-report.json` shows the exact op and AE error; please open an issue with
 that report. Likely tweak points: `jsx/40_anim.jsx` (`text_reveal`), `jsx/30_layers.jsx` (shape groups), effect
 match names in `src/effects/registry.js` (display-name lookup already softens this).
+
+## Host operations added for the autonomous engine
+`time_remap` (comp time → source time keys, frame blending, motion blur), `layers_reorder` (set z-order), `layers_remove`
+(idempotent cleanup, optionally by prefix), mask `ellipse`/`inverted`, `text_reveal unit:"words"`; `inspect` now reports
+position / scale / mask count for every layer. Full list: `xoxo bridge ops`.
 
 ## Adding a host operation
 1. Implement in the right `jsx/NN_*.jsx` with `XOXO.op("name", function (a) {…})`; validate args with `XOXO.need`;

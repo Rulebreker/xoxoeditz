@@ -48,7 +48,7 @@ test('plan critique: each editorial failure is detected, by name, on a plan made
   // sound: none at all / a long gap / too hot / nothing on the drop
   assert.ok(codes(run((p) => { p.audio.sfxEvents = []; })).has('NO_SFX'));
   const gap = run((p) => { p.audio.sfxEvents = p.audio.sfxEvents.filter((e) => e.at < 4 || e.at > 27); }); assert.ok(codes(gap).has('SFX_GAP'));
-  assert.ok(codes(run((p) => { p.audio.sfxEvents[0].fit.layers[0].gainDb = -1; })).has('SFX_HOT'));
+  assert.ok(codes(run((p) => { p.audio.sfxEvents[0].fit.layers[0].gainDb = 40; })).has('SFX_HOT'));
   const nodrop = run((p) => { p.audio.sfxEvents = p.audio.sfxEvents.filter((e) => Math.abs(e.at - p.beatMap.drops[0]) > 0.15); }); assert.ok(codes(nodrop).has('DROP_NO_SFX'));
   assert.ok(codes(run((p) => { p.audio.music = []; })).has('NO_MUSIC')); assert.ok(codes(run((p) => { p.audio.music[0].gainDb = -1; })).has('MUSIC_TOO_LOUD'));
   // rhythm/pacing: metronome and flash shots

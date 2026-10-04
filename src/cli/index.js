@@ -4,6 +4,9 @@ import path from 'node:path';
 import * as S from '../app/services.js';
 import { produceVideo, directProject, beatsFor } from '../app/produce.js';
 import { critiqueProject, promoteProject, memoryCommand } from '../app/creative.js';
+import { runBenchmark, runAllBenchmarks } from '../benchmark/run.js';
+import { BENCHMARK_IDS } from '../benchmark/specs.js';
+import { OVERRIDE_KEYS } from '../director/config.js';
 import { formatProduce, formatDoctor, formatEdit, formatQa, formatStatus, formatEffects, formatRender, formatGeneric, red, green, dim, bold } from './format.js';
 import { readJson, writeJson, ensureDir } from '../core/paths.js';
 import { synthesizeSfx, SYNTH } from '../audio/synth.js';
@@ -23,8 +26,10 @@ ${bold('Everyday workflow')}
   xoxo plan [name] --validate | --show
   xoxo edit --assets <dir> --type <velocity|cinematic|documentary|...> --prompt "..." [--output <dir>]
                                      AUTONOMOUS: scan, direct (music, beats, shots, velocity, camera, SFX, type), build, QA, render
-         [--quality draft|preview|final --duration 30 --seed N --professional --music auto|off|<file> --config edit.config.json --dry-run]
+         [--quality draft|preview|final --duration 30 --seed N --professional --music auto|off|<file> --config edit.config.json --set velocity=0.8,camera=0.4 --dry-run]
   xoxo direct [name] [--seed N --type T --prompt "..."]    re-run only the Director on a scanned project (writes plan.json)
+  xoxo benchmark <velocity|cinematic|documentary|commercial|all> [--dry-run] [--assets dir] [--output dir]
+                                     full production from generated (or your own) media, judged against a checklist -> BENCHMARK_REPORT.md
   xoxo critique [name] [--render file | --last]          creative QA: slideshow? zoom-only? cuts on the beat? sound? black frames? -> CREATIVE_QA.json
   xoxo promote <name> --to final|preview|draft           re-use an approved tier's plan at another resolution (draft/preview/final are separate projects)
   xoxo memory [show|reset|like <id>|dislike <id>]         local taste memory (ids and counts only)
@@ -62,7 +67,7 @@ const OPTIONS = {
   preview: { type: 'boolean' }, range: { type: 'string' }, ame: { type: 'boolean' }, 'keep-intermediate': { type: 'boolean' },
   target: { type: 'string' }, out: { type: 'string' }, verbose: { type: 'boolean', short: 'v' },
   prompt: { type: 'string' }, output: { type: 'string' }, seed: { type: 'string' }, quality: { type: 'string' }, duration: { type: 'string' }, professional: { type: 'boolean' },
-  music: { type: 'string' }, config: { type: 'string' }, to: { type: 'string' }, render: { type: 'string' }, last: { type: 'boolean' }, refine: { type: 'string' }, remember: { type: 'boolean' }, 'starter-sfx': { type: 'boolean' }, name: { type: 'string' }, intensity: { type: 'string' }, sfx: { type: 'string' },
+  music: { type: 'string' }, config: { type: 'string' }, to: { type: 'string' }, render: { type: 'string' }, last: { type: 'boolean' }, refine: { type: 'string' }, remember: { type: 'boolean' }, set: { type: 'string' }, 'starter-sfx': { type: 'boolean' }, name: { type: 'string' }, intensity: { type: 'string' }, sfx: { type: 'string' },
 };
 
 function emit(opts, r, formatter) {
@@ -74,6 +79,20 @@ function emit(opts, r, formatter) {
   else if (!r.success && r.operation === 'render') console.log(formatRender(r), '\n' + red(r.error));
   else console.log(formatGeneric(r));
   return r.success ? 0 : 1;
+}
+
+/** `--set velocity=0.8,camera=0.4` -> explicit dial overrides (the last word: they beat the type, the config and the prompt). */
+export function parseSet(text) {
+  if (!text) return { values: undefined };
+  const values = {};
+  for (const part of String(text).split(',').map((x) => x.trim()).filter(Boolean)) {
+    const m = /^([A-Za-z]+)\s*[=:]\s*(-?[\d.]+)$/.exec(part);
+    if (!m) return { error: `--set expects name=value pairs like velocity=0.8,camera=0.4 (got "${part}")` };
+    if (!OVERRIDE_KEYS.includes(m[1])) return { error: `--set: "${m[1]}" is not a dial (known: ${OVERRIDE_KEYS.join(', ')})` };
+    const v = Number(m[2]); if (!(v >= 0 && v <= 1)) return { error: `--set: ${m[1]} must be between 0 and 1 (got ${m[2]})` };
+    values[m[1]] = v;
+  }
+  return { values };
 }
 
 export async function main(argv) {
@@ -129,13 +148,23 @@ export async function main(argv) {
         if (autonomous) {
           if (!o.assets) { console.error('usage: xoxo edit --assets <folder> --type <type> --prompt "..." [--output <folder>]'); return 2; }
           const num = (v) => (v === undefined ? undefined : Number(v));
-          const r = await produceVideo(ctx, { assets: o.assets, type: o.type, prompt: o.prompt, output: o.output, config: o.config, name: o.name, seed: num(o.seed), quality: o.quality, duration: num(o.duration), professional: o.professional || undefined, music: o.music === 'off' ? false : o.music, sfx: o.sfx === 'off' ? false : o.sfx, intensity: num(o.intensity), style: o.style, title: o.title, resolution: o.resolution, aspect: o.aspect, fps: num(o.fps), captions: o.captions ? true : undefined, dryRun: o['dry-run'], render: !o['no-render'], verify: !o['no-verify'], repair: !o['no-repair'], starterSfx: o['starter-sfx'], force: o.force, remember: o.remember, onProgress: o.json ? undefined : (e) => process.stderr.write(dim(`  → ${e.message}\n`)) });
+          const overrides = parseSet(o.set);
+          if (overrides.error) { console.error(red(overrides.error)); return 2; }
+          const r = await produceVideo(ctx, { assets: o.assets, type: o.type, prompt: o.prompt, output: o.output, config: o.config, name: o.name, seed: num(o.seed), quality: o.quality, duration: num(o.duration), professional: o.professional || undefined, music: o.music === 'off' ? false : o.music, sfx: o.sfx === 'off' ? false : o.sfx, intensity: num(o.intensity), overrides: overrides.values, style: o.style, title: o.title, resolution: o.resolution, aspect: o.aspect, fps: num(o.fps), captions: o.captions ? true : undefined, dryRun: o['dry-run'], render: !o['no-render'], verify: !o['no-verify'], repair: !o['no-repair'], starterSfx: o['starter-sfx'], force: o.force, remember: o.remember, onProgress: o.json ? undefined : (e) => process.stderr.write(dim(`  → ${e.message}\n`)) });
           return emit(o, r, formatProduce);
         }
         const r = await S.editProject(ctx, name, { dryRun: o['dry-run'], verify: !o['no-verify'], repair: !o['no-repair'], onProgress: progress });
         return emit(o, r, formatEdit);
       }
       case 'direct': return emit(o, await directProject(ctx, name, { type: o.type, prompt: o.prompt, seed: o.seed === undefined ? undefined : Number(o.seed), duration: o.duration === undefined ? undefined : Number(o.duration), professional: o.professional || undefined, dryRun: o['dry-run'], starterSfx: o['starter-sfx'], log: o.json ? undefined : (m) => process.stderr.write(dim(`  → ${m}\n`)) }), (d) => `${green('✓')} ${d.shots} shots, ${d.duration}s @ ${Math.round(d.bpm)} BPM (${d.editType})  -> ${d.plan}\n  templates: ${Object.entries(d.templates).map(([k, v]) => `${k}×${v}`).join(', ')}\n${(d.warnings || []).map((w) => '  ' + red('!') + ' ' + w).join('\n')}`);
+      case 'benchmark': {
+        const id = name;
+        if (!id) { console.error(`usage: xoxo benchmark <${BENCHMARK_IDS.join('|')}|all> [--dry-run] [--assets dir] [--output dir] [--quality draft|preview|final] [--seed N]`); return 2; }
+        const bo = { dryRun: o['dry-run'], assets: o.assets, output: o.output, quality: o.quality, seed: o.seed === undefined ? undefined : Number(o.seed), render: !o['no-render'], onProgress: o.json ? undefined : (e) => process.stderr.write(dim(`  → ${e.message}\n`)) };
+        const r = id === 'all' ? await runAllBenchmarks(ctx, bo) : await runBenchmark(ctx, id, bo);
+        const fmtOne = (d) => `${d.passed ? green('PASSED') : red('FAILED')}  ${bold(d.id)} — ${d.title || ''}${d.simulated ? dim('  [simulator]') : ''}\n${(d.results || []).map((x) => `  ${x.status === 'pass' ? green('✓') : x.status === 'fail' ? red('✗') : dim('-')} ${x.label}${x.status !== 'pass' ? dim('  — ' + x.detail) : ''}`).join('\n')}\n  report: ${d.report}`;
+        return emit(o, r, (d) => (d.all ? d.benchmarks.map((b) => (b.results ? fmtOne(b) : `${red('FAILED')} ${b.id}: ${b.error}`)).join('\n\n') + `\n\n${d.passed ? green('ALL BENCHMARKS PASSED') : red('SOME BENCHMARKS FAILED')}${d.simulated ? dim('  (simulated: no video rendered)') : ''}` : fmtOne(d)));
+      }
       case 'critique': return emit(o, await critiqueProject(ctx, name, { file: o.render, last: o.last }), (d) => `${d.passed ? green('CREATIVE QA PASSED') : red('CREATIVE QA FAILED')} — ${d.summary}  (${d.level})\n${Object.entries(d.categories).map(([k, v]) => `  ${k.padEnd(12)} ${v}`).join('\n')}\n${[...d.errors, ...d.warnings].slice(0, 20).map((i) => `  ${i.severity === 'error' ? red('error') : 'warn '} ${i.code}: ${i.message}`).join('\n')}\n  ${dim(d.file)}`);
       case 'promote': { if (!name) { console.error('usage: xoxo promote <project> --to final|preview|draft'); return 2; } return emit(o, await promoteProject(ctx, name, { to: o.to || 'final', finalResolution: o.resolution }), (d) => `${green('✓')} ${d.from} (${d.fromTier}) -> ${d.to} at ${d.output}\n  next: ${d.next}`); }
       case 'memory': { const action = name || 'show'; return emit(o, await memoryCommand(ctx, action, pos.slice(1)), (d) => d.rated ? d.rated.map((r) => `${green('✓')} ${r.id}: ${r.rating}`).join('\n') : d.reset !== undefined ? `${green('✓')} memory ${d.reset ? 'cleared' : 'could not be cleared'} (${d.file})` : `memory ${d.enabled ? 'on' : 'OFF'} — ${d.runs} runs, ${Object.keys(d.ratings).length} ratings\n${d.recentRuns.map((r) => `  ${r.at.slice(0, 16)} ${r.project} ${r.type} seed ${r.seed} score ${r.score}`).join('\n')}\n  ${dim(d.note)}`); }

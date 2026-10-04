@@ -124,8 +124,9 @@ export function planChecks(plan, { manifest = null, library = null } = {}) {
     const times = [0, ...ev.map((e) => e.at), dur].sort((a, b) => a - b); const gap = Math.max(...times.slice(1).map((t, i) => t - times[i]));
     m.longestSfxGap = +gap.toFixed(2);
     if (dials.sfx >= 0.5 && gap > Math.max(8, dur * 0.3)) out.push(issue('sound', 'SFX_GAP', 'warning', `no sound effect for ${gap.toFixed(1)}s`));
-    const hot = ev.filter((e) => e.fit.layers[0].gainDb > -4);
-    if (hot.length) out.push(issue('sound', 'SFX_HOT', 'warning', `${hot.length} sound effect(s) are planned within 4 dB of full scale`));
+    // judged on the sound's own peak plus its gain when the library measured it (a quiet file boosted by 12 dB is as hot as a loud one)
+    const hot = ev.filter((e) => { const pk = assets.get(e.assetId)?.features?.peakDb; return pk !== undefined ? pk + e.fit.layers[0].gainDb > -4 : e.fit.layers[0].gainDb > -4; });
+    if (hot.length) out.push(issue('sound', 'SFX_HOT', 'warning', `${hot.length} sound effect(s) peak within 4 dB of full scale in the mix`));
     const music = plan.audio.music[0];
     if (music && ev.some((e) => assets.get(e.assetId)?.features && (assets.get(e.assetId).features.rmsDb + e.fit.layers[0].gainDb) > (music.gainDb ?? -10) - 6 + 18)) out.push(issue('sound', 'SFX_OVER_MUSIC', 'info', 'some SFX are louder than the music bed would suggest'));
     // every transition that should have a sound has one near its cut

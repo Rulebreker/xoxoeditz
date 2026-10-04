@@ -141,3 +141,9 @@ test('edit.config.json: validation (spec example is valid), typos are reported, 
   fs.writeFileSync(f, '{ not json'); assert.throws(() => loadEditConfig(f), /cannot read/);
   fs.writeFileSync(f, JSON.stringify({ type: 'banana' })); assert.throws(() => loadEditConfig(f), /not an edit type/);
 });
+
+test('prompt: "minimal sound" asks for quiet sound design only - it does not also make the picture "clean"', () => {
+  const p = interpretPrompt('A calm documentary, natural colour, minimal sound.');
+  assert.notEqual(p.color, 'CLEAN'); assert.ok(p.explanation.some((e) => e.rule === 'subtle-sound'));
+  assert.equal(interpretPrompt('a minimal clean look').color, 'CLEAN', 'but "minimal" on its own still means a clean treatment');
+});

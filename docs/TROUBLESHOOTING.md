@@ -21,3 +21,10 @@ Start with `node bin/xoxo.js doctor --connect`. Logs: `.xoxo/logs/xoxo-<date>.js
 | `FFmpeg/FFprobe not found` in `doctor` | Not on PATH and no override seen by this process | Read the "tried" list in the message. `xoxo config set ffmpeg "<full path>"` (persistent) or set `XOXO_FFMPEG` in the *same* terminal that launches `claude`/`node`; `setx` only affects new terminals. Quotes/spaces/slashes are handled; `.cmd` shims are not |
 | Everything fails after an AE crash | Stale listener / lock | `xoxo bridge stop`; restart After Effects; delete `.xoxo/bridge/jobs/*` |
 | Works in `--dry-run`, fails for real | Simulator ≠ real AE | Attach `build-report.json`; check `Likely tweak points` in AE_INTEGRATION.md |
+| `NO_REAL_BEATS` / "cutting to a virtual grid" | No music in the project or library, or it could not be decoded | Put a music file in the assets folder (role `music`), pass `--music FILE`, or add tracks to the library |
+| No sound effects in the edit | No SFX library | `xoxo library starter` (generates a license-free pack) or point `XOXOEDITZ_ASSETS` at yours; or `--starter-sfx` |
+| Creative QA `SLIDESHOW` / `LOW_TEMPLATE_VARIETY` after refinement | Too few distinct pictures | Add more footage; a new seed cannot invent assets (the report says "come from the inputs") |
+| `motion amplitude reduced to N%` | The source has no spare pixels for that move | Use a higher-resolution source or a gentler `--set camera=…` |
+| `speed map … reaches the end of its clip` | Clip shorter than the planned ramp | Add longer clips; the last frame holds meanwhile |
+| Benchmark says **SIMULATED RUN** | You used `--dry-run` or `transport: mock` | Run without it on a machine with After Effects for the real benchmark |
+

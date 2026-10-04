@@ -23,6 +23,21 @@ claude
 > real application end-to-end and tell you precisely what works on your version. See
 > [docs/AE_INTEGRATION.md](docs/AE_INTEGRATION.md#verification-status).
 
+## Two ways to work
+
+**Autonomous (V4)** — one command, music/beat-driven edits:
+
+```
+xoxo edit --assets "D:\Projects\J20\INPUT" --type velocity --prompt "aggressive J20 stealth fighter edit, military look, 30 seconds" --output "D:\Projects\J20\OUTPUT"
+```
+It scans your media, finds the beat of your music (or the best track in your universal library), cuts on the beat, ramps
+speed into impacts, picks camera moves, transitions, type and sound effects, builds the project in After Effects, checks its
+own work (project QA *and* creative QA: slideshow? zoom-only? cuts off the beat?), repairs, renders and verifies. 23 edit
+types, an optional `edit.config.json`, draft/preview/final tiers. Start at **[docs/V4.md](docs/V4.md)**.
+
+**Directed (Claude as the editor)** — narration-driven films: you describe, Claude writes `plan.json` scene by scene using
+the subagents in `.claude/agents/` (below).
+
 ## What it does
 
 | Stage | What happens |
@@ -63,6 +78,12 @@ xoxo doctor [--connect]      xoxo new <name>            xoxo assets [--thumbs]  
 xoxo plan --scaffold|--validate|--show    xoxo edit [--dry-run]    xoxo verify    xoxo render [--preview --range a:b]
 xoxo status    xoxo auto <name> --assets dir --brief "…"    xoxo effects    xoxo bridge install|ping|ops|call
 xoxo selftest    xoxo sfx <kind>    xoxo mcp    xoxo setup    xoxo detect    xoxo config        (all take --json)
+
+# autonomous engine (docs/V4.md)
+xoxo edit --assets DIR --type T --prompt "…" [--output DIR --quality draft|preview|final --set velocity=0.8 --dry-run]
+xoxo direct [project]    xoxo beats AUDIO    xoxo library init|scan|starter|search "fast transition"
+xoxo critique [project]    xoxo promote PROJECT --to final    xoxo memory show|like|dislike|reset
+xoxo benchmark velocity|cinematic|documentary|commercial|all [--dry-run]
 ```
 Claude Code also gets the same capabilities as MCP tools (`xoxo_*`, see [docs/MCP.md](docs/MCP.md)).
 
@@ -80,16 +101,26 @@ Assets are untrusted data and never executed. External programs are spawned with
 Raw script evaluation is off by default. Nothing is downloaded or installed without your approval. No keys or paths
 are hard-coded; nothing user-specific is committed. See [SECURITY.md](SECURITY.md).
 
+## Verification status of the autonomous engine
+
+Tested automatically, deterministically, against the simulator and real FFmpeg media: the prompt/config interpreter, beat
+engine (synthetic ground truth), speed maps, motion/camera maths (edge coverage fuzzed), transitions, typography, compositing,
+SFX search + fit, the Director, creative QA (plan, and render checks on FFmpeg clips with planted defects), tiers, memory,
+incremental builds, and four benchmarks. **Not yet verified in a real After Effects:** time remap, track mattes, the new
+effects' parameter names, word-level text animators, 4K performance. **Not tested on real music:** the beat engine.
+`xoxo benchmark velocity` (without `--dry-run`) is the one command that settles the first; see [docs/V4.md](docs/V4.md#what-is-verified-and-how).
+
 ## Known limits (honest list)
 
 * Not yet validated in real After Effects (see status above). Property paths for text animators / shape trim paths
   and effect parameter names are the most likely things to need version-specific tweaks — each has a fallback.
-* `map` graphics, parallax, freeze frames/time-remap, per-word caption emphasis, preset 3D camera rigs and Lumetri-based grading are **TODO** (3D cameras, mattes, masks and blend modes are reachable today through `advanced` ops).
+* `map` graphics / `MAP_SCENE` (needs map data), per-word caption emphasis, preset 3D camera rigs, precomp-per-panel PIP/split motion and Lumetri-based grading are **TODO** (3D cameras, mattes, masks and blend modes are reachable today through `advanced` ops).
 * Whisper transcription is wired to the `openai-whisper` CLI's JSON output but has not been run against a real install.
 * Quality of auto-synthesised SFX is basic; supply real SFX/music for premium results.
 * Creative quality comes from Claude following the Director rules — the built-in baseline director is a draft.
 
 ## Docs
+[Autonomous engine](docs/V4.md) · [Edit types](docs/EDIT_TYPES.md) · [Library](docs/LIBRARY.md) · [Beats](docs/BEATS.md) · [Velocity](docs/VELOCITY.md) · [Motion & camera](docs/MOTION_AND_CAMERA.md) · [Shots, effects](docs/SHOT_TEMPLATES.md) · [Timeline plan](docs/TIMELINE_PLAN.md) · [Creative QA](docs/CREATIVE_QA.md) · [Benchmarks](docs/BENCHMARKS.md) ·
 [Architecture](docs/ARCHITECTURE.md) · [Installation](docs/INSTALLATION.md) · [Plan format](docs/PLAN_FORMAT.md) ·
 [AE integration](docs/AE_INTEGRATION.md) · [MCP](docs/MCP.md) · [Development](docs/DEVELOPMENT.md) ·
 [Troubleshooting](docs/TROUBLESHOOTING.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)

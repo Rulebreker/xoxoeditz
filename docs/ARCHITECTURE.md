@@ -64,6 +64,25 @@ simulator are never persisted.
 lossless/ProRes intermediate (template names are enumerated from the install, not assumed) then FFmpeg H.264/H.265;
 Media Encoder is the alternative. Output is verified with ffprobe (resolution, fps, duration, audio, not-black).
 
+## Autonomous (timeline) mode
+
+```
+ prompt + edit.config.json ──► src/director/{prompt,config}.js ──► directive (type + 15 dials + sources)
+ assets ──► src/assets (+ visual analysis)        library ──► src/library      music ──► src/beat ──► beat_map.json
+                         └────────────────────────┬──────────────────────────┘
+                                                  ▼
+   src/director/direct.js   slots on the beat → transitions (src/transitions) → per shot: asset (assign.js), template
+   (pure, seeded)           (src/compositing), camera (src/camera), velocity (src/velocity) → text (src/typography)
+                            → sound (src/sfx) → look (src/color) → plan.json (version 2, docs/TIMELINE_PLAN.md)
+                                                  │  refineDirection (src/creative-qa/refine.js): best of N seeds
+                                                  ▼
+   src/ae/compile-timeline.js  → the same stages/units/alternatives/ops → executor → QA (src/qa) → render
+                                                  ▼
+   src/creative-qa  (plan critique; render critique via FFmpeg)     src/memory (optional)     src/benchmark
+```
+Scene mode and timeline mode share everything below the compiler: executor, bridge, host scripts, QA, render, CLI. `buildProject`
+and the services dispatch on `plan.mode`.
+
 ## Data model on disk
 
 ```
@@ -76,10 +95,19 @@ projects/<name>/
   QA_REPORT.json          {passed, errors, warnings, fallbacks_used, checks{8}, repairs}
   compiled-plan.json      normalized plan + compile metadata
   renders/  generated/  thumbs/  dryrun/ (simulator output; never mixed with real results)
-.xoxo/                    capabilities.json, bridge/, logs/*.jsonl, current.json
+  (timeline mode adds)  beat_map.json  DIRECTOR_REPORT.json  CREATIVE_QA.json  EDIT_REPORT.md  library.used.json
+                        build-state.json (incremental builds)  BENCHMARK_REPORT.md  benchmark.json
+  tiers are separate projects: <name>-draft/  <name>-preview/  <name>/
+.xoxo/                    capabilities.json, bridge/, logs/*.jsonl, current.json, library/ (universal manifest), cache/ (visual analysis), memory.json, benchmarks/
 ```
 
 ## Extending
+* New shot template: `src/compositing/templates.js` (+ weight in `src/edit-types/profiles.js`, + test; `node scripts/gen-docs.js`).
+* New transition: `src/transitions/entries.js` (motion half + ops half, last link needs nothing) + `TRANSITION_META`.
+* New text animation: `src/typography/entries.js` + the kinds that may use it in `engine.js`.
+* New camera move / rig: `src/camera/rigs.js`; new primitive: `src/motion/primitives.js`.
+* New edit type: `src/edit-types/profiles.js` (all ids are cross-checked by tests).
+* New creative-QA check: `src/creative-qa/plan-checks.js` + a test that plants the defect.
 * New graphic: `src/motion/graphics.js` builder + `GRAPHIC_KINDS` + validation + tests.
 * New effect/fallback: `src/effects/registry.js` (last impl requires nothing) + test.
 * New host op: `jsx/*.jsx` (ES3) + `src/bridge/ops-doc.js` + simulator support in `mock-ae.js` if needed + test.

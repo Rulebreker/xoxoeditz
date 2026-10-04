@@ -46,6 +46,9 @@ export function slotShots(map, { duration, shotSeconds = [1.5, 4], cutFrequency 
       });
       pick = rng.weighted(w).g;
     }
+    // a drop is the moment of the piece: a shot must START on it. If the chosen cut would sail past one, cut on it instead.
+    const dropT = map.drops.map((d) => d.t ?? d).find((d) => d > t + lo * 0.55 && d < pick - 0.05);
+    if (dropT !== undefined) pick = dropT;
     pick = snapFrame(pick);
     if (pick <= t + 1 / fps) break;
     cuts.push(pick); t = pick;

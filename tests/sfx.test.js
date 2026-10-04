@@ -97,7 +97,7 @@ test('fit: level is normalised by measured loudness and ordered by role; stretch
   assert.ok(lvl('cinematic_impact_01', 'impact') > lvl('fast_whoosh_01', 'transition') - 2, 'impacts sit above whooshes');
   assert.ok(lvl('ui_blip_01', 'ui') < lvl('cinematic_impact_01', 'impact') - 6, 'UI blips sit well below impacts');
   assert.ok(lvl('room_tone_01', 'ambience') < lvl('cinematic_impact_01', 'impact') - 6);
-  for (const a of m.assets) { const f = planSfxFit(a, { at: 3, role: 'impact' }); assert.ok(a.features.peakDb + f.layers[0].gainDb <= -3 + 0.05, `${a.file} peak stays below -3 dBFS`); }
+  for (const a of m.assets) { const f = planSfxFit(a, { at: 3, role: 'impact' }); assert.ok(a.features.peakDb + f.layers[0].gainDb <= -6 + 0.05, `${a.file} peak stays below -6 dBFS`); }
   assert.ok(planSfxFit(by('fast_whoosh_01'), { at: 3, role: 'transition' }, { sfxDial: 1 }).layers[0].gainDb > planSfxFit(by('fast_whoosh_01'), { at: 3, role: 'transition' }, { sfxDial: 0 }).layers[0].gainDb);
   const s1 = planSfxFit(by('fast_whoosh_01'), { at: 3, role: 'transition', targetLength: 0.62 }, { allowStretch: true }); const s2 = planSfxFit(by('fast_whoosh_01'), { at: 3, role: 'transition', targetLength: 3 }, { allowStretch: true });
   assert.ok(s1.layers[0].stretch !== 1 && Math.abs(s1.layers[0].stretch - 1) <= 0.08); assert.equal(s2.layers[0].stretch, 1, 'never stretches far (pitch!)');

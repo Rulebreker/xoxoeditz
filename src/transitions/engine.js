@@ -61,7 +61,9 @@ export function planTransitions(shots, o = {}) {
         if (isChapter) w *= ADVANCED.includes(p.type) ? 2.5 : p.type === 'dissolve' ? 0.2 : 1;
         return w > 0 ? { type: p.type, w } : null;
       }).filter(Boolean);
-      const wantCut = !isChapter && rng.chance(pCut);
+      // if everything that fits would repeat one of the last two transitions, a plain cut is the better edit
+      const onlyRepeats = cands.length > 0 && cands.every((c) => history.slice(-2).includes(c.type)) && !isChapter;
+      const wantCut = onlyRepeats || (!isChapter && rng.chance(pCut));
       if (wantCut || !cands.length) { type = 'cut'; if (!cands.length && !wantCut) notes.push('no transition fits these shot lengths: hard cut'); }
       else type = rng.weighted(cands).type;
       if (isChapter && type === 'cut') type = 'dissolve';

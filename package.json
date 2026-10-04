@@ -5,14 +5,28 @@
   "type": "module",
   "license": "MIT",
   "private": false,
-  "bin": { "xoxo": "bin/xoxo.js" },
-  "engines": { "node": ">=20" },
+  "bin": {
+    "xoxo": "bin/xoxo.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "setup": "node bin/xoxo.js setup",
     "doctor": "node bin/xoxo.js doctor",
     "test": "node scripts/lint-jsx.js && node scripts/run-tests.js",
     "lint:jsx": "node scripts/lint-jsx.js",
-    "mcp": "node bin/xoxo.js mcp"
+    "mcp": "node bin/xoxo.js mcp",
+    "test:fast": "node scripts/lint-jsx.js && node scripts/run-tests.js --fast",
+    "docs": "node scripts/gen-docs.js",
+    "benchmark": "node bin/xoxo.js benchmark"
   },
-  "keywords": ["after-effects", "video-editing", "automation", "claude-code", "mcp", "extendscript"]
+  "keywords": [
+    "after-effects",
+    "video-editing",
+    "automation",
+    "claude-code",
+    "mcp",
+    "extendscript"
+  ]
 }

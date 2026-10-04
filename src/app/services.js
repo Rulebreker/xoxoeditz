@@ -56,7 +56,7 @@ export function resolveProjectName(ctx, name) {
   throw new Error(all.length ? `several projects exist (${all.join(', ')}); pass a project name` : 'no project yet; run `xoxo new <name> --assets <dir>`');
 }
 
-function pathsFor(ctx, name, { dryRun = false } = {}) {
+export function pathsFor(ctx, name, { dryRun = false } = {}) {
   const p = projectPaths(ctx.config, name);
   if (dryRun) {
     const d = path.join(p.root, 'dryrun');

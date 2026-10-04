@@ -40,6 +40,18 @@ You have two equivalent interfaces: the **MCP tools** (`xoxo_*`, registered via 
 `xoxo auto <name> --assets <dir> --brief "…"` runs 1–6(+render) unattended with the baseline director — a good
 first pass, never the final answer for a serious brief.
 
+### Autonomous mode (music/beat-driven edits)
+
+For "make a velocity / cinematic / commercial / … edit from this folder" use **one command** and then *judge the result*:
+
+```
+node bin/xoxo.js edit --assets <dir> --type <type> --prompt "<the user's words>" --output <dir>      # MCP: xoxo_produce
+```
+Then read `projects/<name>/EDIT_REPORT.md` and `CREATIVE_QA.json`; `xoxo_render preview:true` and **look at the frames**; iterate with
+`xoxo_direct seed:N` (another cut), `--set velocity=0.8,camera=0.4` (dials), or edit `plan.json` and re-run `xoxo_edit` (incremental).
+Never call a simulator run "done": `--dry-run` renders nothing, and the report says so. The creative QA judges *structure*; whether
+the picture is good is for your eyes. Docs: `docs/V4.md`. Tests take ~5 min (`npm run test:fast` ≈ 1.5 min).
+
 Subagents in `.claude/agents/` (director, editor, motion-graphics, sound-design, captions, qa, recovery) carry the
 detailed craft rules for each role. Delegate when the task is large; otherwise follow the same rules inline.
 
