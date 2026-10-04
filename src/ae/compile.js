@@ -170,8 +170,10 @@ export function compilePlan(plan, { manifest, narration = null, caps = {}, sfxCu
   const speech = narration?.speech || [];
   if (plan.audio.narration) {
     const n = plan.audio.narration;
-    const ops = [['layers_remove', { comp: MASTER, names: ['NARR_MAIN'] }], ['layer_add_footage', { comp: MASTER, item: n.asset, name: 'NARR_MAIN', start: n.start ?? 0 }]];
-    if (n.gainDb) ops.push(['set_property', { comp: MASTER, layer: 'NARR_MAIN', prop: 'audioLevels', value: [n.gainDb, n.gainDb] }]);
+    const ops = [['layers_remove', { comp: MASTER, names: ['NARR_MAIN'] }], ['layer_add_footage', { comp: MASTER, item: n.asset, name: 'NARR_MAIN', start: n.start ?? 0, ...(n.end ? { end: n.end } : {}) }]];
+    const g = n.gainDb || 0;
+    if (n.end) ops.push(['keyframes', { comp: MASTER, layer: 'NARR_MAIN', prop: 'audioLevels', ease: 'linear', keys: [{ t: Math.max(0, n.end - 0.4), v: [g, g] }, { t: n.end, v: [-96, -96] }] }]); // trimmed narration: short fade so the cut is not a click
+    else if (g) ops.push(['set_property', { comp: MASTER, layer: 'NARR_MAIN', prop: 'audioLevels', value: [g, g] }]);
     au.push({ id: 'audio.narration', label: 'narration', optional: false, primary: 'NARR_MAIN', names: ['NARR_MAIN'], alternatives: [{ name: 'layer', quality: 1, ops }] });
   }
   plan.audio.music.forEach((m, i) => {

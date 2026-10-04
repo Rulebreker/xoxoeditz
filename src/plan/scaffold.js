@@ -8,9 +8,9 @@ import { PLAN_VERSION } from './schema.js';
 
 const MOTION_CYCLE = ['push_in', 'pan_left', 'pull_out', 'pan_right', 'drift', 'push_in', 'pan_up'];
 
-const tokens = (s) => String(s).toLowerCase().match(/[a-z0-9][a-z0-9-]{1,}/g) || [];
+export const tokens = (s) => String(s).toLowerCase().match(/[a-z0-9][a-z0-9-]{1,}/g) || [];
 
-function scoreAsset(asset, words) {
+export function scoreAsset(asset, words) {
   const kw = new Set([...(asset.keywords || []), ...tokens(asset.description || '')]);
   let s = 0;
   for (const w of words) if (kw.has(w)) s += 2; else for (const k of kw) if (k.length > 3 && (w.startsWith(k) || k.startsWith(w))) { s += 1; break; }

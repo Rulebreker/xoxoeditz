@@ -53,6 +53,9 @@ Output defaults to 3840×2160 / 16:9 / 24 fps but any of 720p…8K, 9:16, 1:1, 2
 macOS is supported on a best-effort basis (untested); Linux works for everything except real After Effects
 (dry-runs, tests, CI). Full details: [docs/INSTALLATION.md](docs/INSTALLATION.md).
 
+## First real test
+`node bin/xoxo.js showcase real-test --assets assets --brief "..."` builds, QA's, renders and verifies a 20-30 s edit in your real After Effects and writes `REAL_EDIT_REPORT.md` - see [docs/SHOWCASE.md](docs/SHOWCASE.md).
+
 ## Commands
 
 ```

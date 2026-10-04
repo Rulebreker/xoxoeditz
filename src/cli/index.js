@@ -7,6 +7,7 @@ import { readJson, writeJson, ensureDir } from '../core/paths.js';
 import { synthesizeSfx, SYNTH } from '../audio/synth.js';
 import { runTool } from '../core/resolve-tool.js';
 import { OPS_DOC } from '../bridge/ops-doc.js';
+import { runShowcase } from '../app/showcase.js';
 
 const HELP = `
 ${bold('XOXOEDITZ')} — autonomous After Effects video editing agent
@@ -23,6 +24,8 @@ ${bold('Everyday workflow')}
   xoxo render [name] [--preview --range 10:20]
   xoxo status [name]
   xoxo auto <name> --assets dir --brief "..."   everything above, unattended
+  xoxo showcase <name> [--assets dir] [--title T] [--brief "..."] [--target 25]
+                                     REAL end-to-end demo (20-30 s) in After Effects -> final.mp4 + REAL_EDIT_REPORT.md
 
 ${bold('Setup & tools')}
   xoxo setup [--startup]             install bridge scripts, run doctor
@@ -45,7 +48,7 @@ const OPTIONS = {
   title: { type: 'string' }, brief: { type: 'string' }, style: { type: 'string' }, resolution: { type: 'string' }, aspect: { type: 'string' }, fps: { type: 'string' }, 'no-captions': { type: 'boolean' }, captions: { type: 'boolean' },
   'no-verify': { type: 'boolean' }, 'no-repair': { type: 'boolean' }, 'no-render': { type: 'boolean' },
   preview: { type: 'boolean' }, range: { type: 'string' }, ame: { type: 'boolean' }, 'keep-intermediate': { type: 'boolean' },
-  out: { type: 'string' }, verbose: { type: 'boolean', short: 'v' },
+  target: { type: 'string' }, out: { type: 'string' }, verbose: { type: 'boolean', short: 'v' },
 };
 
 function emit(opts, r, formatter) {
@@ -117,6 +120,12 @@ export async function main(argv) {
         return emit(o, r, (d, full) => formatRender(full));
       }
       case 'status': return emit(o, await S.statusProject(ctx, name), formatStatus);
+      case 'showcase': {
+        if (!name) { console.error('usage: xoxo showcase <name> [--assets dir] [--title T] [--brief "..."] [--style S] [--target 25] [--resolution 1080p] [--script f|--subtitles f]'); return 2; }
+        const r = await runShowcase(ctx, name, { assets: o.assets, title: o.title, brief: o.brief, style: o.style, target: o.target ? Number(o.target) : undefined, resolution: o.resolution, aspect: o.aspect, fps: o.fps ? Number(o.fps) : undefined, script: o.script, subtitles: o.subtitles, captions: o['no-captions'] ? false : (o.captions ? true : undefined), onStep: o.json ? undefined : (s) => { if (s.status === 'start') process.stderr.write(dim(`  → ${s.label}\n`)); else console.log(`${s.ok ? green('✓') : red('✗')} ${s.label}${s.detail ? dim('  ' + s.detail) : ''}${s.error ? red('  ' + s.error) : ''}  ${dim((s.ms / 1000).toFixed(1) + 's')}`); }, onProgress: undefined });
+        if (o.json) console.log(JSON.stringify(r, null, 2)); else console.log(`\n${r.success ? green('DONE') : red('FAILED')}  report: ${r.data.report}${r.success ? `\n      video:  ${r.data.output}` : '\n      ' + red(r.error)}`);
+        return r.success ? 0 : 1;
+      }
       case 'auto': return await auto(ctx, o, pos);
       case 'selftest': return await selftest(ctx, o);
       case 'sfx': {

@@ -35,6 +35,8 @@ You have two equivalent interfaces: the **MCP tools** (`xoxo_*`, registered via 
 | 7 | Review | `xoxo_render preview:true range:"a:b"` | **Look at the extracted frames.** Iterate on `plan.json`, re-run `xoxo_edit` (idempotent). |
 | 8 | Deliver | `xoxo_render` | Verified file path + what fallbacks were used. |
 
+`xoxo showcase <name> --assets <dir>` is the real-AE end-to-end demo (docs/SHOWCASE.md); it refuses to run on the simulator and its REAL_EDIT_REPORT.md must only contain what the run measured.
+
 `xoxo auto <name> --assets <dir> --brief "…"` runs 1–6(+render) unattended with the baseline director — a good
 first pass, never the final answer for a serious brief.
 

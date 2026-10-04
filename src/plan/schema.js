@@ -102,7 +102,10 @@ export function validatePlan(plan, { manifest = null, narration = null } = {}) {
   (plan.advanced || []).forEach((adv, j) => checkAdvanced(`advanced[${j}]`, adv, err));
 
   const audio = plan.audio || {};
-  if (audio.narration) checkAsset('audio.narration.asset', audio.narration.asset);
+  if (audio.narration) {
+    checkAsset('audio.narration.asset', audio.narration.asset);
+    if (audio.narration.end !== undefined && !(isNum(audio.narration.end) && audio.narration.end > 0)) err('audio.narration.end', 'narration end must be a positive number (master seconds)');
+  }
   (audio.music || []).forEach((m, i) => {
     checkAsset(`audio.music[${i}].asset`, m.asset);
     if (isNum(m.gainDb) && m.gainDb > -6) warn(`audio.music[${i}].gainDb`, `music at ${m.gainDb} dB will fight the narration; typical bed is -18 to -24 dB`);

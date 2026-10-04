@@ -67,15 +67,15 @@ export const STYLE_ALIASES = {
 export function guessStyle(brief = '') {
   const t = brief.toLowerCase();
   const score = (re) => (t.match(re) || []).length;
-  const scores = {
-    'military-documentary': score(/military|fighter|jet|j-?20|weapon|army|navy|air force|defen[cs]e|war/g) * 2 + score(/documentary/g),
-    'cinematic-documentary': score(/cinematic|documentary|serious|epic|history|premium/g),
-    'premium-commercial': score(/commercial|automotive|car |luxury|brand|advert/g) * 2,
-    'tech-explainer': score(/tech|software|ai |explainer|app |startup|saas/g) * 2,
-    'minimal-corporate': score(/corporate|minimal|business|clean|presentation/g),
-    'fast-youtube': score(/youtube|fast|viral|shorts|tiktok|reels|punchy|meme/g) * 2,
+  const scores = { // whole words only ("jet" must not match "objective"); ties fall to the first entry
+    'cinematic-documentary': score(/\b(cinematic|documentary|serious|epic|history|historic|premium|story)\b/g),
+    'military-documentary': score(/\b(military|fighter|jets?|j-?20|f-?\d\d|weapons?|army|navy|air force|defen[cs]e|warfare|combat|missiles?)\b/g) * 2,
+    'premium-commercial': score(/\b(commercial|automotive|cars?|luxury|brand|advert\w*)\b/g) * 2,
+    'tech-explainer': score(/\b(tech|technology|software|ai|explainer|app|startup|saas)\b/g) * 2,
+    'minimal-corporate': score(/\b(corporate|minimal|business|clean|presentation)\b/g),
+    'fast-youtube': score(/\b(youtube|fast|viral|shorts|tiktok|reels|punchy|meme)\b/g) * 2,
   };
-  const best = Object.entries(scores).sort((a, b) => b[1] - a[1])[0];
+  const best = Object.entries(scores).sort((a, b) => b[1] - a[1])[0]; // stable sort keeps insertion order on ties
   return best[1] > 0 ? best[0] : 'cinematic-documentary';
 }
 

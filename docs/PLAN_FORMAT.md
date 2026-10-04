@@ -73,7 +73,7 @@ Positions: `center top-center bottom-center lower-left lower-right upper-left up
 
 ## `audio`
 ```jsonc
-{ "narration": { "asset": "NARR_NARRATION", "gainDb": 0 },
+{ "narration": { "asset": "NARR_NARRATION", "gainDb": 0, "end": 27.5 },   // end (optional) trims the narration with a 0.4 s fade
   "music": [ { "asset": "MUSIC_MAIN", "start": 0, "end": null, "gainDb": -20, "duckDb": -10, "fadeIn": 2, "fadeOut": 3, "duckUnderNarration": true } ],
   "sfx":   [ { "asset": "SFX_WHOOSH_01", "at": 12.4, "gainDb": -8 } ],
   "autoSfx": true }
