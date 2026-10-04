@@ -59,6 +59,10 @@ export function timelineCheck({ plan, narration, inspect, build }) {
       if (Math.abs(l.inPoint - sc.start) > eps || Math.abs(l.outPoint - (sc.end + sc.tail)) > eps) out.push(issue('TIMELINE_CHECK', 'SCENE_LAYER_TIMING', 'error', `${sc.layer} spans ${l.inPoint.toFixed(2)}–${l.outPoint.toFixed(2)}s, expected ${sc.start.toFixed(2)}–${(sc.end + sc.tail).toFixed(2)}s.`, { comp: MASTER, layer: sc.layer }));
     }
   }
+  for (const sh of build.meta.shotLayers || []) { // timeline mode: every shot's main layer spans its planned window (cut +/- half a transition)
+    const l = master?.layers?.find((x) => x.name === sh.layer);
+    if (l && (Math.abs(l.inPoint - sh.expectStart) > eps || Math.abs(l.outPoint - sh.expectEnd) > eps)) out.push(issue('TIMELINE_CHECK', 'SHOT_LAYER_TIMING', 'error', `${sh.id}: ${sh.layer} spans ${l.inPoint.toFixed(2)}–${l.outPoint.toFixed(2)}s, expected ${sh.expectStart.toFixed(2)}–${sh.expectEnd.toFixed(2)}s.`, { comp: MASTER, layer: sh.layer }));
+  }
   if (narration && Math.abs(narration.duration - masterEnd(plan)) > 2) out.push(issue('TIMELINE_CHECK', 'NARRATION_LENGTH', 'warning', `Narration is ${narration.duration.toFixed(1)}s but the timeline is ${masterEnd(plan).toFixed(1)}s.`));
   for (const c of compsOf(inspect)) for (const l of c.layers || []) {
     if (l.outPoint <= l.inPoint) out.push(issue('TIMELINE_CHECK', 'LAYER_ZERO_LENGTH', 'error', `${c.name}/${l.name} has no duration.`, { comp: c.name, layer: l.name }));
@@ -79,7 +83,7 @@ export function textCheck({ plan, inspect, build, caps }) {
   const style = resolveStyle(plan.style, caps);
   const edge = Math.min(W, H) * 0.03;
   for (const c of compsOf(inspect)) {
-    const texts = (c.layers || []).filter((l) => l.kind === 'text');
+    const texts = (c.layers || []).filter((l) => l.kind === 'text' && l.enabled !== false); // a hidden layer (e.g. the base of kinetic type) shows nothing
     for (const l of texts) {
       if (!String(l.text || '').trim()) out.push(issue('TEXT_CHECK', 'TEXT_EMPTY', 'warning', `${c.name}/${l.name} is empty.`, { comp: c.name, layer: l.name }));
       if (l.fontSize && l.fontSize < H * 0.022) out.push(issue('TEXT_CHECK', 'TEXT_TOO_SMALL', 'warning', `${c.name}/${l.name} is ${l.fontSize}px on a ${H}px frame — likely unreadable.`, { comp: c.name, layer: l.name }));

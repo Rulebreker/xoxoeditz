@@ -150,7 +150,7 @@ export function compileTimeline(plan, { manifest, library = null, narration = nu
     const chain = resolveChain(t.effectId, caps);
     const res = { effectId: t.effectId, requested: chain.requestedId, using: chain.chain[0]?.id ?? null, quality: chain.chain[0]?.quality ?? 0, bestQuality: chain.bestQuality, skipped: chain.skipped, degraded: !chain.chain[0] || chain.chain[0].quality < chain.bestQuality || chain.id !== chain.requestedId };
     resolutions.push(res);
-    tu.push(unit({ id: `transition.${i + 1}`, label: `${shots[i].id} -> ${shots[i + 1].id}: ${t.type}`, optional: true, names, primary: names[0] || null, alternatives: alts, resolution: res }));
+    tu.push(unit({ id: `transition.${i + 1}`, label: `${shots[i].id} -> ${shots[i + 1].id}: ${t.type}`, optional: true, names, primary: namesOf(alts[0].ops)[0] || null, alternatives: alts, resolution: res })); // primary = what the BEST alternative creates (a fallback may create others)
     layout[i + 1].fx = names;
   });
   stages.push({ id: 'transitions', label: `Transitions (${tu.length})`, units: tu.filter(keep) });

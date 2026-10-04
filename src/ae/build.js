@@ -100,5 +100,5 @@ export async function buildProject({ config, bridge, caps, plan: rawPlan, manife
   ensureDir(paths.root);
   writeJson(paths.buildReport, full);
   writeJson(paths.compiled, { plan, meta: build.meta });
-  return { success: report.success, operation: 'edit', data: full, ...(report.success ? {} : { error: `${report.errors.length} required step(s) failed: ${report.errors.slice(0, 3).map((e) => `${e.label}: ${e.message}`).join(' | ')}`, recoverable: true }), _build: build, _plan: plan, _caps: hostCaps.caps, _manifest: sfx.manifest };
+  return { success: report.success, operation: 'edit', data: full, ...(report.success ? {} : { error: `${report.errors.length} required step(s) failed: ${report.errors.slice(0, 3).map((e) => `${e.label}: ${e.message}`).join(' | ')}`, recoverable: true }), _build: build, _plan: plan, _caps: hostCaps.caps, _manifest: timeline ? { ...manifest, assets: [...manifest.assets, ...(library?.assets || [])] } : sfx.manifest };
 }

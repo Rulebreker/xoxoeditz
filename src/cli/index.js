@@ -2,7 +2,8 @@ import { parseArgs } from 'node:util';
 import fs from 'node:fs';
 import path from 'node:path';
 import * as S from '../app/services.js';
-import { formatDoctor, formatEdit, formatQa, formatStatus, formatEffects, formatRender, formatGeneric, red, green, dim, bold } from './format.js';
+import { produceVideo, directProject, beatsFor } from '../app/produce.js';
+import { formatProduce, formatDoctor, formatEdit, formatQa, formatStatus, formatEffects, formatRender, formatGeneric, red, green, dim, bold } from './format.js';
 import { readJson, writeJson, ensureDir } from '../core/paths.js';
 import { synthesizeSfx, SYNTH } from '../audio/synth.js';
 import { runTool } from '../core/resolve-tool.js';
@@ -19,7 +20,12 @@ ${bold('Everyday workflow')}
   xoxo narration [name] [--script f | --subtitles f | --transcribe]
   xoxo plan [name] --scaffold --title T --brief "..." [--style S --resolution 4k --aspect 16:9]
   xoxo plan [name] --validate | --show
-  xoxo edit [name] [--dry-run]       build the project in After Effects (+ QA + auto-repair)
+  xoxo edit --assets <dir> --type <velocity|cinematic|documentary|...> --prompt "..." [--output <dir>]
+                                     AUTONOMOUS: scan, direct (music, beats, shots, velocity, camera, SFX, type), build, QA, render
+         [--quality draft|preview|final --duration 30 --seed N --professional --music auto|off|<file> --config edit.config.json --dry-run]
+  xoxo direct [name] [--seed N --type T --prompt "..."]    re-run only the Director on a scanned project (writes plan.json)
+  xoxo beats <audio> [--out beat_map.json]                 BPM, beats, downbeats, drops, breaks, rises, impacts, sections
+  xoxo edit [name] [--dry-run]       build the project in After Effects from plan.json (+ QA + auto-repair)
   xoxo verify [name]                 re-run QA on the saved project
   xoxo render [name] [--preview --range 10:20]
   xoxo status [name]
@@ -51,6 +57,8 @@ const OPTIONS = {
   'no-verify': { type: 'boolean' }, 'no-repair': { type: 'boolean' }, 'no-render': { type: 'boolean' },
   preview: { type: 'boolean' }, range: { type: 'string' }, ame: { type: 'boolean' }, 'keep-intermediate': { type: 'boolean' },
   target: { type: 'string' }, out: { type: 'string' }, verbose: { type: 'boolean', short: 'v' },
+  prompt: { type: 'string' }, output: { type: 'string' }, seed: { type: 'string' }, quality: { type: 'string' }, duration: { type: 'string' }, professional: { type: 'boolean' },
+  music: { type: 'string' }, config: { type: 'string' }, 'starter-sfx': { type: 'boolean' }, name: { type: 'string' }, intensity: { type: 'string' }, sfx: { type: 'string' },
 };
 
 function emit(opts, r, formatter) {
@@ -110,10 +118,23 @@ export async function main(argv) {
         }
         return emit(o, r, (d) => `${green('✓')} plan valid: ${d.scenes} scenes, ${d.duration}s, ${d.output.width}x${d.output.height}@${d.output.fps}\n${d.warnings.map((w) => `  ${red('!')} ${w.path}: ${w.message}`).join('\n')}`);
       }
+      case 'produce':
       case 'edit': {
+        const autonomous = cmd === 'produce' || o.assets || o.prompt || o.type;
         const progress = o.json ? undefined : (p) => { if (p.status === 'start') process.stderr.write(dim(`  → ${p.label}\n`)); };
+        if (autonomous) {
+          if (!o.assets) { console.error('usage: xoxo edit --assets <folder> --type <type> --prompt "..." [--output <folder>]'); return 2; }
+          const num = (v) => (v === undefined ? undefined : Number(v));
+          const r = await produceVideo(ctx, { assets: o.assets, type: o.type, prompt: o.prompt, output: o.output, config: o.config, name: o.name, seed: num(o.seed), quality: o.quality, duration: num(o.duration), professional: o.professional || undefined, music: o.music === 'off' ? false : o.music, sfx: o.sfx === 'off' ? false : o.sfx, intensity: num(o.intensity), style: o.style, title: o.title, resolution: o.resolution, aspect: o.aspect, fps: num(o.fps), captions: o.captions ? true : undefined, dryRun: o['dry-run'], render: !o['no-render'], verify: !o['no-verify'], repair: !o['no-repair'], starterSfx: o['starter-sfx'], force: o.force, onProgress: o.json ? undefined : (e) => process.stderr.write(dim(`  → ${e.message}\n`)) });
+          return emit(o, r, formatProduce);
+        }
         const r = await S.editProject(ctx, name, { dryRun: o['dry-run'], verify: !o['no-verify'], repair: !o['no-repair'], onProgress: progress });
         return emit(o, r, formatEdit);
+      }
+      case 'direct': return emit(o, await directProject(ctx, name, { type: o.type, prompt: o.prompt, seed: o.seed === undefined ? undefined : Number(o.seed), duration: o.duration === undefined ? undefined : Number(o.duration), professional: o.professional || undefined, dryRun: o['dry-run'], starterSfx: o['starter-sfx'], log: o.json ? undefined : (m) => process.stderr.write(dim(`  → ${m}\n`)) }), (d) => `${green('✓')} ${d.shots} shots, ${d.duration}s @ ${Math.round(d.bpm)} BPM (${d.editType})  -> ${d.plan}\n  templates: ${Object.entries(d.templates).map(([k, v]) => `${k}×${v}`).join(', ')}\n${(d.warnings || []).map((w) => '  ' + red('!') + ' ' + w).join('\n')}`);
+      case 'beats': {
+        if (!name) { console.error('usage: xoxo beats <audio file> [--out beat_map.json]'); return 2; }
+        return emit(o, await beatsFor(ctx, name, { out: o.out }), (d) => `${green('✓')} ${d.bpm} BPM (confidence ${d.confidence}), ${d.beats} beats, ${d.downbeats} downbeats, ${d.bars} bars\n  drops: ${d.drops.map((x) => x.t.toFixed(2) + 's').join(', ') || 'none'}   breaks: ${d.breaks.map((x) => x.start.toFixed(1) + '–' + x.end.toFixed(1) + 's').join(', ') || 'none'}   rises: ${d.rises.map((x) => x.start.toFixed(1) + '→' + x.end.toFixed(1) + 's').join(', ') || 'none'}\n  sections: ${d.sections.map((x) => `${x.kind} ${x.start.toFixed(1)}–${x.end.toFixed(1)}s`).join(' | ')}${d.out ? '\n  saved: ' + d.out : ''}`);
       }
       case 'verify': return emit(o, await S.verifyProject(ctx, name, { dryRun: o['dry-run'], repair: !o['no-repair'] }), (d) => formatQa({ ...d, passed: d.passed }));
       case 'render': {

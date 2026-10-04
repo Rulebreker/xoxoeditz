@@ -20,6 +20,8 @@ import { scaffoldPlan } from '../plan/scaffold.js';
 import { validatePlan, normalizePlan, masterEnd } from '../plan/schema.js';
 import { buildProject, refreshHostCapabilities, prepareSfx } from '../ae/build.js';
 import { compilePlan } from '../ae/compile.js';
+import { compileTimeline } from '../ae/compile-timeline.js';
+import { isTimelinePlan, validateTimeline, normalizeTimeline } from '../timeline/plan.js';
 import { runQa } from '../qa/checks.js';
 import { repairIssues } from '../qa/repair.js';
 import { renderProject } from '../render/index.js';
@@ -71,8 +73,18 @@ function loadProject(ctx, name, { dryRun = false } = {}) {
     manifest: readJson(paths.manifest, null),
     narration: readJson(paths.narration, null),
     plan: readJson(paths.plan, null),
+    library: mergeLibrary(loadLibraryManifest(ctx.config), readJson(paths.libraryUsed, null)),
   };
 }
+
+/** The project's own copy of the library assets its plan uses wins over the shared library (so a project survives library changes). */
+function mergeLibrary(shared, used) {
+  if (!used) return shared;
+  const ids = new Set(used.assets.map((a) => a.id));
+  return { ...(shared || { version: 1, counts: {}, warnings: [] }), assets: [...(shared?.assets || []).filter((a) => !ids.has(a.id)), ...used.assets] };
+}
+
+const normalizeAny = (plan, manifest) => (isTimelinePlan(plan) ? normalizeTimeline(plan) : normalizePlan(plan, { manifest }));
 
 // ---------------- capabilities ----------------
 export async function getCapabilities(ctx, { refresh = false } = {}) {
@@ -328,9 +340,10 @@ export function validateProjectPlan(ctx, name) {
     const n = resolveProjectName(ctx, name);
     const prj = loadProject(ctx, n);
     if (!prj.plan) throw new Error('no plan.json yet; run `xoxo plan --scaffold` or write one');
-    const v = validatePlan(prj.plan, { manifest: prj.manifest, narration: prj.narration });
-    const norm = v.valid ? normalizePlan(prj.plan, { manifest: prj.manifest }) : null;
-    return { ...ok('validate_plan', { valid: v.valid, errors: v.errors, warnings: v.warnings, output: norm?.output, duration: norm ? masterEnd(norm) : null, scenes: prj.plan.scenes?.length }), success: v.valid, ...(v.valid ? {} : { error: `${v.errors.length} problem(s) in plan.json`, recoverable: true }) };
+    const timeline = isTimelinePlan(prj.plan);
+    const v = timeline ? validateTimeline(prj.plan, { manifest: prj.manifest, library: prj.library }) : validatePlan(prj.plan, { manifest: prj.manifest, narration: prj.narration });
+    const norm = v.valid ? normalizeAny(prj.plan, prj.manifest) : null;
+    return { ...ok('validate_plan', { valid: v.valid, errors: v.errors, warnings: v.warnings, output: norm?.output, duration: norm ? masterEnd(norm) : null, scenes: timeline ? prj.plan.timeline.shots.length : prj.plan.scenes?.length, mode: timeline ? 'timeline' : 'scenes' }), success: v.valid, ...(v.valid ? {} : { error: `${v.errors.length} problem(s) in plan.json`, recoverable: true }) };
   });
 }
 
@@ -340,6 +353,10 @@ async function inspectProject(bridge) {
 }
 
 async function reconstructBuild(ctx, prj, caps) {
+  if (isTimelinePlan(prj.plan)) {
+    const plan = normalizeTimeline(prj.plan);
+    return { plan, build: compileTimeline(plan, { manifest: prj.manifest, library: prj.library, narration: prj.narration, caps }), manifest: { ...prj.manifest, assets: [...prj.manifest.assets, ...(prj.library?.assets || [])] } };
+  }
   const plan = normalizePlan(prj.plan, { manifest: prj.manifest });
   const sfx = await prepareSfx(ctx.config, plan, prj.manifest, prj.paths.generated, { synth: true });
   return { plan, build: compilePlan(plan, { manifest: sfx.manifest, narration: prj.narration, caps, sfxCues: sfx.cues }), manifest: sfx.manifest };
@@ -377,7 +394,7 @@ export function editProject(ctx, name, { dryRun = false, verify = true, repair =
     ensureDir(prj.paths.root); ensureDir(path.dirname(prj.paths.aep));
     const { bridge, caps, mock } = await openBridge(ctx, { dryRun });
     try {
-      const built = await buildProject({ config: ctx.config, bridge, caps, plan: prj.plan, manifest: prj.manifest, narration: prj.narration, paths: prj.paths, logger: ctx.logger, onProgress });
+      const built = await buildProject({ config: ctx.config, bridge, caps, plan: prj.plan, manifest: prj.manifest, library: prj.library, narration: prj.narration, paths: prj.paths, logger: ctx.logger, onProgress });
       if (built.error && !built._build) return built; // invalid plan / cannot open project
       const out = { build: { success: built.success, summary: built.data?.summary, errors: built.data?.errors, fallbacksUsed: built.data?.fallbacksUsed, degraded: built.data?.degraded, project: prj.paths.aep, checkpoint: built.data?.checkpoint, transport: bridge.transportName, notes: built.data?.compiled?.notes, report: prj.paths.buildReport }, dryRun: mock };
       if (verify) {
@@ -420,7 +437,7 @@ export function renderProjectCmd(ctx, name, opts = {}) {
     const n = resolveProjectName(ctx, name);
     const prj = loadProject(ctx, n);
     if (!prj.plan || !prj.manifest) throw new Error('need plan.json and assets.manifest.json');
-    const plan = normalizePlan(prj.plan, { manifest: prj.manifest });
+    const plan = normalizeAny(prj.plan, prj.manifest);
     const qa = readJson(prj.paths.qa, null);
     if (!qa) return fail('render', 'no QA report yet; run `xoxo verify` (or `xoxo edit`) first — rendering an unverified project wastes time', { recoverable: true, code: 'QA_REQUIRED' });
     if (!qa.passed && !opts.force) return fail('render', `QA_REPORT.json has ${qa.errors.length} error(s): ${qa.errors.slice(0, 3).map((e) => e.message).join(' | ')}. Fix them (or pass --force).`, { recoverable: true, code: 'QA_FAILED' });
@@ -451,7 +468,7 @@ export function statusProject(ctx, name) {
     const steps = {
       assets: manifest ? `${manifest.assets.length} assets` : 'not scanned',
       narration: has(p.narration) ? 'analysed' : 'none',
-      plan: plan ? `${plan.scenes.length} scenes, style ${plan.style}` : 'none',
+      plan: plan ? (isTimelinePlan(plan) ? `${plan.timeline.shots.length} shots, ${plan.timeline.duration}s, ${plan.editType} @ ${Math.round(plan.timeline.bpm || 0)} BPM` : `${plan.scenes.length} scenes, style ${plan.style}`) : 'none',
       build: br ? `${br.success ? 'ok' : 'FAILED'} — ${br.summary}` : 'not built',
       qa: qa ? `${qa.passed ? 'passed' : 'FAILED'} — ${qa.summary}` : 'not run',
       render: lr ? `${lr.output}${lr.preview ? ' (preview)' : ''}` : 'not rendered',

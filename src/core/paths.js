@@ -50,6 +50,7 @@ export function projectPaths(config, name) {
     state: path.join(root, 'state.json'),
     buildState: path.join(root, 'build-state.json'),
     beatMap: path.join(root, 'beat_map.json'),
+    libraryUsed: path.join(root, 'library.used.json'),
     directorReport: path.join(root, 'DIRECTOR_REPORT.json'),
     creativeQa: path.join(root, 'CREATIVE_QA.json'),
   };

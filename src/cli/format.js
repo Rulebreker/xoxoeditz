@@ -56,3 +56,15 @@ export function formatGeneric(r) {
   if (!r.success) return `${red('✗')} ${r.operation}: ${r.error}`;
   return `${green('✓')} ${r.operation}\n${JSON.stringify(r.data, null, 2)}`;
 }
+
+export function formatProduce(d) {
+  const lines = [];
+  const sim = d.simulated;
+  lines.push(`${d.rendered ? green('DONE') : sim ? yellow('PLANNED + SIMULATED') : red('NOT RENDERED')}  project ${bold(d.project)}${sim ? dim('  [simulator: nothing was rendered]') : ''}`);
+  if (d.output) lines.push(`  video:     ${d.output}`);
+  lines.push(`  project:   ${d.aep}`, `  plan:      ${d.plan}`, d.beatMap ? `  beat map:  ${d.beatMap}` : null, `  report:    ${d.report}`);
+  const q = d.edit?.qa; if (q) lines.push(`  QA:        ${q.passed ? green('passed') : red('FAILED')} — ${q.summary}`);
+  const fb = d.edit?.build?.fallbacksUsed || []; if (fb.length) lines.push(`  fallbacks: ${fb.slice(0, 6).map((f) => `${f.effect || f.label} → ${f.using}`).join('; ')}${fb.length > 6 ? ` (+${fb.length - 6})` : ''}`);
+  for (const e of (d.edit?.build?.errors || []).slice(0, 5)) lines.push(`  ${red('error')} ${e.label}: ${e.message}`);
+  return lines.filter(Boolean).join('\n');
+}
