@@ -26,7 +26,8 @@ import { renderProject } from '../render/index.js';
 import { describeCapabilities } from '../effects/registry.js';
 import { isAeRunning } from '../detect/tools.js';
 import { readInstallManifest, uninstallAll } from '../core/install-manifest.js';
-import { initLibrary, refreshLibrary } from '../library/scan.js';
+import { initLibrary, refreshLibrary, loadLibraryManifest } from '../library/scan.js';
+import { searchLibrary } from '../sfx/search.js';
 import { generateStarterSfx } from '../library/starter.js';
 import { resolveTool, TOOL_SPECS, normalizeToolPath, describeTried } from '../core/resolve-tool.js';
 
@@ -169,6 +170,14 @@ export const libraryStarter = (ctx, opts = {}) => attempt('library_starter', asy
   initLibrary(root);
   const files = await generateStarterSfx(ctx.config, root);
   return { root, generated: files.length, note: 'Basic procedurally generated SFX (license-free). Replace/extend with a real library for premium results.' };
+});
+
+/** Semantic search of the library manifest ("fast transition", "technical UI", ...). Read-only. */
+export const librarySearch = (ctx, query, opts = {}) => attempt('library_search', () => {
+  const m = loadLibraryManifest(ctx.config);
+  if (!m) throw new Error('library has not been scanned yet: run `xoxo library scan`');
+  const results = searchLibrary(m, query, { type: opts.type || 'sfx', editType: opts.editType || null, limit: opts.limit || 5 });
+  return { query, type: opts.type || 'sfx', results: results.map((r) => ({ id: r.asset.id, file: r.asset.file, category: r.asset.subcategory, duration: r.asset.duration, energy: r.asset.energy, score: r.score, reasons: r.reasons })) };
 });
 
 /** PROJECT/{INPUT,AUDIO,OUTPUT,CACHE,REPORTS} anywhere the user likes. Sources are only ever read. */

@@ -31,7 +31,7 @@ ${bold('Setup & tools')}
   xoxo setup [--startup]             install bridge scripts, run doctor
   xoxo detect                        rebuild the capability registry (.xoxo/capabilities.json)
   xoxo effects                       effect fallback chains for this machine
-  xoxo library init [dir] | scan | starter [dir]   universal asset library (SFX, music, overlays, ...)
+  xoxo library init [dir] | scan | starter [dir] | search <query>   universal asset library (SFX, music, overlays, ...)
   xoxo project init <dir>            create INPUT/AUDIO/OUTPUT/CACHE/REPORTS anywhere
   xoxo bridge install|ping|stop|ops|installed|uninstall|call <op> [json]
   xoxo sfx <whoosh|impact|riser|tick> [--out file]
@@ -46,7 +46,7 @@ const OPTIONS = {
   json: { type: 'boolean' }, help: { type: 'boolean', short: 'h' }, 'dry-run': { type: 'boolean' }, connect: { type: 'boolean' }, startup: { type: 'boolean' },
   assets: { type: 'string' }, dir: { type: 'string' }, thumbs: { type: 'boolean' }, 'no-probe': { type: 'boolean' },
   audio: { type: 'string' }, script: { type: 'string' }, subtitles: { type: 'string' }, transcribe: { type: 'boolean' }, 'noise-db': { type: 'string' },
-  scaffold: { type: 'boolean' }, validate: { type: 'boolean' }, show: { type: 'boolean' }, force: { type: 'boolean' }, 'also-in-library': { type: 'boolean' },
+  scaffold: { type: 'boolean' }, validate: { type: 'boolean' }, show: { type: 'boolean' }, force: { type: 'boolean' }, 'also-in-library': { type: 'boolean' }, limit: { type: 'string' }, type: { type: 'string' },
   title: { type: 'string' }, brief: { type: 'string' }, style: { type: 'string' }, resolution: { type: 'string' }, aspect: { type: 'string' }, fps: { type: 'string' }, 'no-captions': { type: 'boolean' }, captions: { type: 'boolean' },
   'no-verify': { type: 'boolean' }, 'no-repair': { type: 'boolean' }, 'no-render': { type: 'boolean' },
   preview: { type: 'boolean' }, range: { type: 'string' }, ame: { type: 'boolean' }, 'keep-intermediate': { type: 'boolean' },
@@ -133,7 +133,8 @@ export async function main(argv) {
         if (sub === 'init') return emit(o, await S.libraryInit(ctx, pos[1]), (d) => `${green('✓')} library at ${d.root} (${d.created} folders created)\n${d.next.map((n) => '  • ' + n).join('\n')}`);
         if (sub === 'scan') return emit(o, await S.libraryScan(ctx, { alsoInLibrary: o['also-in-library'] }), (d) => `${green('✓')} ${Object.entries(d.counts).map(([k, v]) => `${v} ${k}`).join(', ') || 'empty'}  -> ${d.manifest}\n${d.warnings.map((w) => '  ' + red('!') + ' ' + w).join('\n')}`);
         if (sub === 'starter') return emit(o, await S.libraryStarter(ctx, { dir: pos[1] }), (d) => `${green('✓')} ${d.generated} SFX generated in ${d.root}\n  ${dim(d.note)}`);
-        console.error('usage: xoxo library init [dir] | scan | starter [dir]'); return 2;
+        if (sub === 'search') return emit(o, await S.librarySearch(ctx, pos.slice(1).join(' '), { type: o.type, limit: o.limit ? Number(o.limit) : 5 }), (d) => d.results.length ? d.results.map((r) => `  ${r.score.toFixed(2)}  ${r.file}  ${dim(`${r.category}, ${r.duration}s — ${r.reasons.matched.join(', ')}`)}`).join('\n') : 'no match');
+        console.error('usage: xoxo library init [dir] | scan | starter [dir] | search <query>'); return 2;
       }
       case 'project': {
         if (name === 'init' && pos[1]) return emit(o, await S.projectInit(ctx, pos[1]), (d) => `${green('✓')} ${d.root}\n${d.folders.map((f) => `  ${f.created ? '+' : '='} ${f.dir}`).join('\n')}`);
