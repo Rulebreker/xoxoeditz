@@ -2,6 +2,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { validatePlan, normalizePlan, masterEnd } from '../plan/schema.js';
 import { compilePlan, countOps } from './compile.js';
+import { compileTimeline } from './compile-timeline.js';
+import { isTimelinePlan, validateTimeline, normalizeTimeline } from '../timeline/plan.js';
+import { readJson } from '../core/paths.js';
 import { executeBuild } from './executor.js';
 import { openOrCreateProject, checkpoint } from './project.js';
 import { mergeHostInfo, saveRegistry } from '../detect/registry.js';
@@ -54,14 +57,27 @@ export async function prepareSfx(config, plan, manifest, generatedDir, { synth =
 /**
  * Whole edit: validate -> capabilities -> sound design -> compile -> open project -> execute -> checkpoint.
  */
-export async function buildProject({ config, bridge, caps, plan: rawPlan, manifest, narration, paths, logger = nullLogger, onProgress, synthSfx = true }) {
-  const v = validatePlan(rawPlan, { manifest, narration });
+export async function buildProject({ config, bridge, caps, plan: rawPlan, manifest, library = null, narration, paths, logger = nullLogger, onProgress, synthSfx = true, incremental = true }) {
+  const timeline = isTimelinePlan(rawPlan);
+  const v = timeline ? validateTimeline(rawPlan, { manifest, library }) : validatePlan(rawPlan, { manifest, narration });
   if (!v.valid) return fail('edit', `plan is invalid:\n${v.errors.map((e) => `  - ${e.path}: ${e.message}`).join('\n')}`, { recoverable: true, code: 'PLAN_INVALID', data: v });
-  const plan = normalizePlan(rawPlan, { manifest });
+  const plan = timeline ? normalizeTimeline(rawPlan) : normalizePlan(rawPlan, { manifest });
 
   const hostCaps = await refreshHostCapabilities(bridge, caps, config, logger);
-  const sfx = await prepareSfx(config, plan, manifest, paths.generated, { synth: synthSfx });
-  const build = compilePlan(plan, { manifest: sfx.manifest, narration, caps: hostCaps.caps, sfxCues: sfx.cues });
+  let sfx = { manifest, cues: [], notes: [] }; let build;
+  if (timeline) {
+    // incremental only when the saved project is exactly the one the last build produced
+    const st = incremental ? readJson(paths.buildState, null) : null;
+    const aepNow = fs.existsSync(paths.aep) ? fs.statSync(paths.aep) : null;
+    const sameProject = Boolean(st && aepNow && st.aep && st.aep.size === aepNow.size && Math.abs(st.aep.mtimeMs - aepNow.mtimeMs) < 2 && st.fingerprint === `${plan.output.width}x${plan.output.height}@${plan.output.fps}` && (st.transport !== 'mock' || (bridge.transportName === 'mock' && st.pid === process.pid))); // a simulator project lives in memory: it is only reusable inside the process that built it
+    const previous = sameProject ? { sameProject, hashes: st.hashes, names: st.names, structure: st.structure } : null;
+    build = compileTimeline(plan, { manifest, library, narration, caps: hostCaps.caps, previous });
+    // units that vanished from the plan would leave their layers behind: rebuild from scratch
+    if (previous && (previous.structure !== build.meta.structure || Object.keys(previous.hashes).some((id) => !(id in build.meta.hashes)))) build = compileTimeline(plan, { manifest, library, narration, caps: hostCaps.caps, previous: null });
+  } else {
+    sfx = await prepareSfx(config, plan, manifest, paths.generated, { synth: synthSfx });
+    build = compilePlan(plan, { manifest: sfx.manifest, narration, caps: hostCaps.caps, sfxCues: sfx.cues });
+  }
   build.meta.notes.push(...sfx.notes);
   logger.info('compiled', { stages: build.stages.length, ops: countOps(build) });
 
@@ -71,10 +87,14 @@ export async function buildProject({ config, bridge, caps, plan: rawPlan, manife
   const report = await executeBuild(bridge, build, { logger, onProgress });
   const cp = await checkpoint(bridge, paths, report.success ? 'build' : 'build_with_errors');
   if (!cp.success) report.warnings.push(`checkpoint failed: ${cp.error}`);
+  if (timeline && report.success) {
+    const stt = fs.existsSync(paths.aep) ? fs.statSync(paths.aep) : null;
+    if (stt) writeJson(paths.buildState, { hashes: build.meta.hashes, names: build.meta.unitNames, structure: build.meta.structure, aep: { size: stt.size, mtimeMs: stt.mtimeMs }, fingerprint: `${plan.output.width}x${plan.output.height}@${plan.output.fps}`, transport: bridge.transportName, pid: process.pid, at: new Date().toISOString() });
+  } else if (timeline) { try { fs.rmSync(paths.buildState, { force: true }); } catch { /* */ } } // a failed build must not be treated as a base for the next incremental one
 
   const full = {
     ...report, project: paths.aep, checkpoint: cp.data?.file || null, transport: bridge.transportName,
-    ae: opened.data.ae, hostProblems: hostCaps.problems, compiled: { master: build.meta.master, scenes: build.meta.sceneComps.length, duration: build.meta.duration, style: build.meta.style, notes: build.meta.notes, assetsUsed: build.meta.assetsUsed },
+    ae: opened.data.ae, hostProblems: hostCaps.problems, compiled: { master: build.meta.master, scenes: timeline ? plan.timeline.shots.length : build.meta.sceneComps.length, reusedUnits: build.meta.reused?.length || 0, incremental: Boolean(build.meta.incremental), duration: build.meta.duration, style: build.meta.style, notes: build.meta.notes, assetsUsed: build.meta.assetsUsed },
     validationWarnings: v.warnings,
   };
   ensureDir(paths.root);

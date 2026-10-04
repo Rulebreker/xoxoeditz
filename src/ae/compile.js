@@ -26,7 +26,7 @@ const sceneCompName = (i) => `COMP_SCENE_${pad2(i + 1)}`;
 const sceneLayerName = (i) => `SC_S${pad2(i + 1)}`;
 
 /** A unit whose alternatives come from walking an effect's implementation chain. */
-function effectUnit({ id, label, effectId, caps, ctx, pre = [], post = [], names = [], optional = true }) {
+export function effectUnit({ id, label, effectId, caps, ctx, pre = [], post = [], names = [], optional = true }) {
   const chain = resolveChain(effectId, caps);
   const alternatives = chain.chain.map((impl) => ({
     name: impl.id, quality: impl.quality,

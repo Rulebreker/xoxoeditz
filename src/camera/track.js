@@ -15,10 +15,11 @@ const TOL = { x: 0.0005, y: 0.0005, ls: 0.0008, r: 0.04 }; // per-channel tolera
  *  asset     {w,h} source size in pixels (unknown -> assumed to have the comp's aspect)
  *  base      cover-fit scale in percent (src px -> comp px); default derived from asset
  *  t0, dur   absolute start and length of the shot (seconds)
+ *  exempt    [[a,b]] shot-relative windows where the picture may leave the frame (a transition: the other shot covers it)
  *  center    {x,y} picture-centre offset from the comp centre as comp fractions (a cropped layer is not centred)
  *  fps, seed, maxLift (default 1.35), maxKeys (default 48)
  */
-export function buildCameraTrack({ specs, comp, asset = null, base = null, center = null, t0 = 0, dur, fps = 24, seed = 'cam', maxLift = 1.35, maxKeys = 48 }) {
+export function buildCameraTrack({ specs, comp, asset = null, base = null, center = null, exempt = [], t0 = 0, dur, fps = 24, seed = 'cam', maxLift = 1.35, maxKeys = 48 }) {
   const cen = center || { x: 0, y: 0 };
   const warnings = [];
   const src = asset && asset.w && asset.h ? asset : { w: comp.w, h: comp.h };
@@ -26,11 +27,16 @@ export function buildCameraTrack({ specs, comp, asset = null, base = null, cente
   const basePct = base ?? Math.max(comp.w / src.w, comp.h / src.h) * 100;
   const img = { w: src.w * basePct / 100, h: src.h * basePct / 100 };
   const times = frameTimes(dur, fps);
-  const raw = sampleMotion(specs, times, { shotDur: dur, seed });
+  // Camera moves are scaled to respect the overscan cap; transition moves (tag "transition") are not - they are
+  // allowed to leave the frame, but only inside `exempt` windows where the neighbouring shot covers the picture.
+  const mainSpecs = specs.filter((x) => x.tag !== 'transition'); const trSpecs = specs.filter((x) => x.tag === 'transition');
+  const rawMain = sampleMotion(mainSpecs, times, { shotDur: dur, seed });
+  const rawTr = trSpecs.length ? sampleMotion(trSpecs, times, { shotDur: dur, seed: `${seed}.tr` }) : null;
+  const inExempt = (t) => exempt.some(([a, b]) => t >= a - 1e-6 && t <= b + 1e-6);
 
   // 1. find the biggest offset multiplier k in (0,1] whose overscan fits under maxLift (offsets/rotation scale, zoom does not)
-  const at = (k) => raw.map((q) => ({ t: q.t, x: q.x * k, y: q.y * k, s: q.s, r: q.r * k }));
-  const cover = (smp) => requiredCover(smp.map((q) => ({ ...q, x: q.x + cen.x, y: q.y + cen.y })), comp, img); // coverage is judged around the picture's real centre
+  const at = (k) => rawMain.map((q, i) => { const w = rawTr ? rawTr[i] : { x: 0, y: 0, s: 1, r: 0 }; return { t: q.t, x: q.x * k + w.x, y: q.y * k + w.y, s: q.s * w.s, r: q.r * k + w.r }; });
+  const cover = (smp) => requiredCover(smp.filter((q) => !inExempt(q.t)).map((q) => ({ ...q, x: q.x + cen.x, y: q.y + cen.y })), comp, img) ; // judged around the picture's real centre, outside transitions
   let k = 1; let lift = cover(at(1));
   if (lift > maxLift) {
     let lo = 0; let hi = 1;

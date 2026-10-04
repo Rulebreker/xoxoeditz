@@ -113,9 +113,10 @@ export const SHOT_TRANSITION_ENTRIES = {
   ]),
 
   'shot.transition.mask': E('Mask wipe: a feathered edge sweeps across and reveals the incoming shot.', [
+    // the incoming shot sits ABOVE the outgoing one, so the wipe is applied to it and runs from fully wiped (100) to revealed (0)
     { id: 'linear_wipe', quality: 1, requires: { effects: [WIPE] }, motion: none, build: (c, r) => [
-      ['layer_effect_add', { comp: c.comp, layer: c.outgoing || c.incoming, matchName: r.effects[WIPE.matchName], name: 'Linear Wipe', tag: 'wipe', params: { 'Wipe Angle': (dir(c) + 90) % 360, Feather: Math.round(c.h * 0.06) } }],
-      ['effect_param_keys', { comp: c.comp, layer: c.outgoing || c.incoming, effect: 'XOXO:wipe:Linear Wipe', param: 'Transition Completion', keys: [T(c.t, 0), T(c.t + c.d, 100)] }],
+      ['layer_effect_add', { comp: c.comp, layer: c.incoming, matchName: r.effects[WIPE.matchName], name: 'Linear Wipe', tag: 'wipe', params: { 'Wipe Angle': (dir(c) + 270) % 360, Feather: Math.round(c.h * 0.06) } }],
+      ['effect_param_keys', { comp: c.comp, layer: c.incoming, effect: 'XOXO:wipe:Linear Wipe', param: 'Transition Completion', keys: [T(c.t, 100), T(c.t + c.d, 0)] }],
     ] },
     { id: 'matte_slide', quality: 0.8, requires: {}, motion: none, build: (c) => [
       ['layers_remove', { comp: c.comp, names: [nm(c, 'MATTE')] }],

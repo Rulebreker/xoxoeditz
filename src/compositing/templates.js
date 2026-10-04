@@ -204,6 +204,7 @@ export function stackOps(plan, ctx) {
     const src = L.src; const rect = L.rect || { x: 0, y: 0, w: 1, h: 1 };
     ops.push(['layers_remove', { comp: comp.name, names: [L.name] }]);
     ops.push(['layer_add_footage', { comp: comp.name, item: L.asset, name: L.name, start: t0, end: t1, sourceIn: L.sourceIn ?? 0, speed: 1, opacity: L.opacity, blend: L.blend || undefined, motionBlur: L.motionBlur || undefined }]);
+    if (ctx.hasAudio?.(L.asset)) ops.push(['layer_set', { comp: comp.name, layer: L.name, props: { audioEnabled: false } }]); // picture only: sound comes from the music/SFX layers
     let placement = null;
     if (src) {
       const crop = L.crop || (L.role === 'subject' ? null : null);
@@ -219,7 +220,7 @@ export function stackOps(plan, ctx) {
     if (ctx.remap && L.speed === 'follow') ops.push(...ctx.remap(L));
     const moves = L.motion && L.motion.length;
     if (moves && placement && src) {
-      const tr = buildCameraTrack({ specs: L.motion, comp, asset: src, base: placement.scalePct, center: placement.center, t0, dur: t1 - t0, fps, seed: `${ctx.seed ?? 'stack'}.${L.name}`, maxLift: L.maxLift || 1.35 });
+      const tr = buildCameraTrack({ specs: L.motion, comp, asset: src, base: placement.scalePct, center: placement.center, exempt: L.exempt || [], t0, dur: t1 - t0, fps, seed: `${ctx.seed ?? 'stack'}.${L.name}`, maxLift: L.maxLift || 1.35 });
       tracks[L.name] = tr; warnings.push(...tr.warnings.map((w) => `${L.name}: ${w}`));
       ops.push(['keyframes', { comp: comp.name, layer: L.name, prop: 'scale', keys: tr.scale, ease: 'linear' }], ['keyframes', { comp: comp.name, layer: L.name, prop: 'position', keys: tr.position, ease: 'linear' }]);
       if (tr.rotation) ops.push(['keyframes', { comp: comp.name, layer: L.name, prop: 'rotation', keys: tr.rotation, ease: 'linear' }]);

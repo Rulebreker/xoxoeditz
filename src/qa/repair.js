@@ -2,6 +2,7 @@
 import { MASTER } from '../ae/compile.js';
 import { executeBuild } from '../ae/executor.js';
 import { musicLevelKeys } from '../audio/sound.js';
+import { masterEnd } from '../plan/schema.js';
 
 export async function repairIssues(bridge, qa, { plan, build, narration, manifest, logger }) {
   const actions = [];
@@ -45,7 +46,7 @@ export async function repairIssues(bridge, qa, { plan, build, narration, manifes
     } else if (issue.code === 'AUDIO_NOT_DUCKED') {
       const m = plan.audio.music.find((x, i) => issue.layer.startsWith(`MUSIC_`) && build.stages.some((st) => st.units.some((u) => u.primary === issue.layer && u.id.startsWith(`audio.music.${i + 1}.`))));
       if (!m || !narration?.speech) continue;
-      const end = plan.scenes[plan.scenes.length - 1].end;
+      const end = masterEnd(plan);
       const keys = musicLevelKeys({ gainDb: m.gainDb ?? -20, duckDb: m.duckDb ?? -10, fadeIn: m.fadeIn ?? 2, fadeOut: m.fadeOut ?? 3, layerStart: m.start ?? 0, layerEnd: m.end ?? end, speech: narration.speech });
       note(issue, 'reapply-ducking', await bridge.call('keyframes', { comp: MASTER, layer: issue.layer, prop: 'audioLevels', keys, ease: 'linear' }));
     } else if (issue.code === 'MISSING_LAYER') {
