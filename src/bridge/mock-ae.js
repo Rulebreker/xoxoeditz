@@ -29,6 +29,14 @@ export const DEFAULT_EFFECTS = [
   ['ADBE Noise', 'Noise', 'Noise & Grain', [['ADBE Noise-0001', 'Amount of Noise', 0]]],
   ['ADBE Add Grain', 'Add Grain', 'Noise & Grain', []],
   ['ADBE Drop Shadow', 'Drop Shadow', 'Perspective', [['ADBE Drop Shadow-0001', 'Shadow Color', [0, 0, 0, 1]], ['ADBE Drop Shadow-0002', 'Opacity', 50]]],
+  // V4: effects used by shot transitions, colour looks and text animations
+  ['ADBE Motion Blur', 'Directional Blur', 'Blur & Sharpen', [['ADBE Motion Blur-0001', 'Direction', 0], ['ADBE Motion Blur-0002', 'Blur Length', 0]]],
+  ['CC Radial Fast Blur', 'CC Radial Fast Blur', 'Blur & Sharpen', [['CC Radial Fast Blur-0001', 'Type', 1], ['CC Radial Fast Blur-0002', 'Amount', 0]]],
+  ['ADBE Exposure2', 'Exposure', 'Color Correction', [['ADBE Exposure2-0001', 'Exposure', 0]]],
+  ['ADBE Wave Warp', 'Wave Warp', 'Distort', [['ADBE Wave Warp-0001', 'Wave Height', 0], ['ADBE Wave Warp-0002', 'Wave Width', 100]]],
+  ['ADBE Ramp', 'Gradient Ramp', 'Generate', [['ADBE Ramp-0001', 'Start Color', [1, 1, 1, 1]], ['ADBE Ramp-0002', 'End Color', [0, 0, 0, 1]], ['ADBE Ramp-0003', 'Ramp Shape', 1]]],
+  ['ADBE HUE SATURATION', 'Hue/Saturation', 'Color Correction', [['ADBE HUE SATURATION-0001', 'Master Saturation', 0]]],
+  ['ADBE Brightness & Contrast 2', 'Brightness & Contrast', 'Color Correction', [['ADBE Brightness & Contrast 2-0001', 'Brightness', 0], ['ADBE Brightness & Contrast 2-0002', 'Contrast', 0]]],
 ];
 
 // ---- property tree --------------------------------------------------------------------------

@@ -87,6 +87,7 @@ XOXO.op("text_reveal", function (a) {
   var layer = XOXO.getLayer(comp, a.layer);
   var mode = a.mode;
   if (mode !== "typewriter" && mode !== "fade_up" && mode !== "tracking_in") throw XOXO.err("unknown text_reveal mode: " + mode, "BAD_ARGS", false);
+  var warnings = [];
   var animators = layer.property("ADBE Text Properties").property("ADBE Text Animators");
   var an = animators.addProperty("ADBE Text Animator");
   an.name = "XOXO Reveal";
@@ -97,7 +98,11 @@ XOXO.op("text_reveal", function (a) {
   props.addProperty("ADBE Text Opacity").setValue(0);
   if (mode === "fade_up") props.addProperty("ADBE Text Position 3D").setValue([0, XOXO.def(a.offset, 40), 0]);
   if (mode === "tracking_in") props.addProperty("ADBE Text Tracking Amount").setValue(XOXO.def(a.tracking, 60));
-  var warnings = [];
+  // Based On: 1 characters, 3 words. Reveal word by word instead of letter by letter.
+  if (a.unit === "words") {
+    try { sel.property("ADBE Text Range Advanced").property("ADBE Text Range Type2").setValue(3); }
+    catch (eU) { warnings.push("word unit not applied (revealing by character): " + eU.message); }
+  }
   if (mode !== "typewriter") {
     try { sel.property("ADBE Text Range Advanced").property("ADBE Text Range Shape").setValue(2); }
     catch (e) { warnings.push("range shape not set: " + e.message); }

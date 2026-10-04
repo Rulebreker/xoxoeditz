@@ -30,7 +30,7 @@ export const OPS_DOC = {
   track_matte: { group: 'layer', args: '{comp,layer,matte,type:"alpha"|"alphaInverted"|"luma"|"lumaInverted"}', doc: 'Track matte.' },
   mask_add: { group: 'layer', args: '{comp,layer,rect:[l,t,w,h],shape?:"rect"|"ellipse",inverted?,feather?,name?}', doc: 'Add a mask.' },
   text_set: { group: 'layer', args: '{comp,layer,text?,size?,color?}', doc: 'Edit text content/style.' },
-  text_reveal: { group: 'anim', args: '{comp,layer,mode:"typewriter"|"fade_up"|"tracking_in",start,duration,offset?,tracking?}', doc: 'Per-character text animator (range selector sweep).' },
+  text_reveal: { group: 'anim', args: '{comp,layer,mode:"typewriter"|"fade_up"|"tracking_in",start,duration,offset?,tracking?,unit?:"characters"|"words"}', doc: 'Per-character text animator (range selector sweep).' },
   set_property: { group: 'anim', args: '{comp,layer,prop,value}', doc: 'Set a property. prop = position|scale|rotation|opacity|anchor|audioLevels|timeRemap|sourceText or a "Group/Name" path of match/display names.' },
   keyframes: { group: 'anim', args: '{comp,layer,prop,keys:[{t,v,hold?,ease?}],ease?:"linear"|"easeOut"|"easeIn"|"easeInOut",clear?}', doc: 'Keyframe a property; ease applies between consecutive keys. clear:false appends.' },
   time_remap: { group: 'anim', args: '{comp,layer,keys:[{t,src}],start?,end?,frameBlend?:"none"|"mix"|"pixel",motionBlur?}', doc: 'Enable Time Remap and set comp-time -> source-time keyframes (variable speed, freezes, reverse). Stills/solids are refused.' },

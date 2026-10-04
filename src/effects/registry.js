@@ -10,17 +10,18 @@
 // The LAST implementation of every effect has no requirements, so a missing plugin never blocks a project.
 
 import { findEffect } from './capabilities.js';
+import { fx, T, key as keyOp } from './fx.js';
+import { COLOR_LOOK_ENTRIES } from '../color/looks.js';
+import { SHOT_TRANSITION_ENTRIES } from '../transitions/entries.js';
+import { TEXT_ANIM_ENTRIES } from '../typography/entries.js';
 
-/** Declare a native After Effects effect requirement by match name, with a display-name fallback for lookup. */
-export const fx = (matchName, displayName) => ({ matchName, displayName });
-
-const T = (t, v) => ({ t, v });
+export { fx };
 
 /**
  * Transition builders act on the MASTER comp. ctx = { comp, incoming, outgoing|null, t, d, w, h, fps, ... }.
  * They return ops ([opName, args]) - never touch AE directly.
  */
-const key = (comp, layer, prop, keys, ease = 'easeOut') => ['keyframes', { comp, layer, prop, keys, ease }];
+const key = keyOp;
 
 export const REGISTRY = {
   'transition.dissolve': {
@@ -154,9 +155,14 @@ export const REGISTRY = {
   },
 };
 
+// V4 additions live in their own modules and register here so one resolver serves everything.
+Object.assign(REGISTRY, COLOR_LOOK_ENTRIES, SHOT_TRANSITION_ENTRIES, TEXT_ANIM_ENTRIES);
+
 /** Alternative effect chain used when a requested id doesn't exist. */
 export function unknownEffectFallback(id) {
   if (id.startsWith('transition.')) return 'transition.dissolve';
+  if (id.startsWith('shot.transition.')) return 'shot.transition.dissolve';
+  if (id.startsWith('text.anim.')) return 'text.anim.fade';
   return null;
 }
 
@@ -189,7 +195,7 @@ export function resolveChain(id, caps, { registry = REGISTRY } = {}) {
     if (!reason) for (const f of impl.requires?.fonts || []) {
       if (!caps?.fonts?.postScriptNames?.includes(f)) { reason = `font not installed: ${f}`; break; }
     }
-    if (reason) skipped.push({ impl: impl.id, reason }); else chain.push({ id: impl.id, quality: impl.quality, build: impl.build, resolved });
+    if (reason) skipped.push({ impl: impl.id, reason }); else chain.push({ id: impl.id, quality: impl.quality, build: impl.build, motion: impl.motion, resolved });
   }
   return { id: useId, requestedId: id, chain, skipped, bestQuality: impls[0].quality };
 }
@@ -227,7 +233,7 @@ export function resolveEffect(id, caps, { registry = REGISTRY, disallow = [] } =
       if (!caps?.fonts?.postScriptNames?.includes(f)) { reason = `font not installed: ${f}`; break; }
     }
     if (reason) { skipped.push({ impl: impl.id, reason }); continue; }
-    return { id, requestedId, implementation: impl.id, build: impl.build, resolved, quality: impl.quality, depth: i, skipped, degraded: i > 0 || requestedId !== id || impl.quality < bestQuality };
+    return { id, requestedId, implementation: impl.id, build: impl.build, motion: impl.motion, resolved, quality: impl.quality, depth: i, skipped, degraded: i > 0 || requestedId !== id || impl.quality < bestQuality };
   }
   return { id, requestedId, implementation: null, build: null, resolved: {}, quality: 0, depth: impls.length, skipped, degraded: true, unavailable: true };
 }
