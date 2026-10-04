@@ -87,6 +87,21 @@ Music is ducked using the narration's measured speech segments. Short music is l
 (SRT/VTT → exact, Whisper → word-accurate, script → approximate). Captions are outlined for legibility.
 TODO: per-word emphasis colouring.
 
+## `advanced` (scene-level and plan-level)
+Escape hatch for anything the plan vocabulary doesn't cover but the host can do (cameras, 3D layers, blend modes, track
+mattes, masks, expressions, markers, effects...). A block is a list of **typed host ops** (`xoxo bridge ops`), run inside
+the idempotent build; `comp` defaults to the scene's composition (`"$COMP"`) — use `"$MASTER"` for the master. `raw_eval`
+is never allowed here.
+```json
+{ "id": "S03", "start": 20, "end": 30, "clips": [{ "asset": "IMG_J20_FRONT" }],
+  "advanced": [ { "label": "3D camera push", "optional": true, "ops": [
+      { "op": "layers_remove", "args": { "names": ["CAM_MAIN"] } },
+      { "op": "layer_add_camera", "args": { "name": "CAM_MAIN" } },
+      { "op": "keyframes", "args": { "layer": "CAM_MAIN", "prop": "position", "ease": "easeInOut",
+          "keys": [{ "t": 0, "v": [960, 540, -1600] }, { "t": 10, "v": [960, 540, -1200] }] } } ] } ] }
+```
+Include your own `layers_remove` so re-running stays idempotent. Not-yet-exposed: freeze frames / time remap (TODO).
+
 ## Layer naming (what you'll see in After Effects)
 `COMP_MASTER`, `COMP_SCENE_01…`, scene layers `SC_S01…`, footage layers = asset id (`IMG_J20_FRONT`), `TXT_TITLE_1`,
 `SHP_TITLE_RULE_1`, `TXT_LT_NAME_1`, `NARR_MAIN`, `MUSIC_MAIN`, `SFX_WHOOSH_01_1`, `CAP_0001…`, `ADJ_GRADE`, `ADJ_GRAIN`.

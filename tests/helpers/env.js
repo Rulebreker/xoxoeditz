@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { loadConfig } from '../../src/core/config.js';
 
 process.env.XOXO_TEST_ALLOW = [process.env.XOXO_TEST_ALLOW, 'fake-afterfx.mjs', 'fake-aerender.mjs'].filter(Boolean).join(',');
@@ -17,4 +18,6 @@ export function testConfig(overrides = {}) {
   return cfg;
 }
 
-export const FAKE_AE = path.resolve(path.dirname(new URL(import.meta.url).pathname), 'fake-afterfx.mjs');
+export const FAKE_AE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'fake-afterfx.mjs');
+/** Tests that spawn shebang scripts as fake executables cannot run on Windows. */
+export const NO_FAKE_EXE = process.platform === 'win32' ? 'fake executables need a POSIX shell' : false;

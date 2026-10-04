@@ -2,11 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { toolList, handleMessage } from '../src/mcp/server.js';
 import { createContext } from '../src/app/services.js';
 import { tmpDir } from './helpers/env.js';
 
-const BIN = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', 'bin', 'xoxo.js');
+const BIN = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'bin', 'xoxo.js');
 
 test('tool definitions are well-formed', () => {
   const tools = toolList();

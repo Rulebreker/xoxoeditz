@@ -107,3 +107,20 @@ test('narration analysis on a synthetic voice track', { skip: !hasFfmpeg }, asyn
   assert.equal(noText.transcript.method, 'none');
   assert.ok(noText.notes[0].includes('No transcript'));
 });
+
+test('untrusted media is only ever opened through the file protocol', { skip: process.platform === 'win32' }, async () => {
+  const dir = tmpDir();
+  const log = path.join(dir, 'args.log');
+  const fake = path.join(dir, 'fake-ffprobe.mjs');
+  fs.writeFileSync(fake, `#!/usr/bin/env node\nimport fs from 'node:fs';\nfs.appendFileSync(${JSON.stringify(log)}, JSON.stringify(process.argv.slice(2)) + '\\n');\nconsole.log('{}');\n`);
+  fs.chmodSync(fake, 0o755);
+  process.env.XOXO_TEST_ALLOW = `${process.env.XOXO_TEST_ALLOW || ''},fake-ffprobe.mjs`;
+  const cfg = testConfig({ ffprobe: fake });
+  const root = tmpDir();
+  fs.writeFileSync(path.join(root, 'evil.mp4'), '#EXTM3U\n#EXTINF:1,\nfile:///etc/passwd\n');
+  await scanAssets(cfg, root);
+  const calls = fs.readFileSync(log, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  assert.equal(calls.length, 1);
+  const i = calls[0].indexOf('-protocol_whitelist');
+  assert.ok(i >= 0 && calls[0][i + 1] === 'file', 'ffprobe is restricted to the file protocol');
+});

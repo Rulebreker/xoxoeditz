@@ -1,4 +1,4 @@
-// XOXOEDITZ host — project, folders, import, compositions (ES3 only).
+// XOXOEDITZ host -- project, folders, import, compositions (ES3 only).
 
 XOXO.op("ping", function (a) {
   var net = null;

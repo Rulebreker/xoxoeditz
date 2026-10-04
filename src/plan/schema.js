@@ -1,5 +1,6 @@
 import { resolveOutput } from './output.js';
 import { REGISTRY } from '../effects/registry.js';
+import { OPS_DOC } from '../bridge/ops-doc.js';
 
 export const PLAN_VERSION = 1;
 
@@ -10,6 +11,15 @@ export const POSITIONS = ['center', 'top-center', 'bottom-center', 'lower-left',
 
 const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
 const isStr = (v) => typeof v === 'string' && v.length > 0;
+
+/** `advanced` blocks run typed host ops inside the idempotent build (cameras, 3D, mattes, blend modes, masks...). */
+function checkAdvanced(path, adv, err) {
+  if (!adv || !Array.isArray(adv.ops) || adv.ops.length === 0) { err(path, 'advanced block needs ops: [{op, args}]'); return; }
+  adv.ops.forEach((o, i) => {
+    if (!o || !OPS_DOC[o.op]) err(`${path}.ops[${i}]`, `unknown host op "${o?.op}" (see xoxo bridge ops)`);
+    else if (['raw_eval', 'batch', 'project_new', 'project_open', 'project_save'].includes(o.op)) err(`${path}.ops[${i}]`, `op "${o.op}" is not allowed inside an advanced block`);
+  });
+}
 
 /**
  * Validate a plan against the manifest. Pure; returns {valid, errors, warnings}. Paths are JSON-pointer-ish.
@@ -80,12 +90,16 @@ export function validatePlan(plan, { manifest = null, narration = null } = {}) {
       if (g.kind === 'highlight_box' && !(Array.isArray(g.rect) && g.rect.length === 4)) err(`${gp}.rect`, 'highlight_box needs rect: [x,y,w,h] in 0..1 frame coordinates');
     });
 
+    (s.advanced || []).forEach((adv, j) => checkAdvanced(`${p}.advanced[${j}]`, adv, err));
+
     if (s.transition) {
       const t = s.transition;
       if (t.type && !REGISTRY[`transition.${t.type}`]) warn(`${p}.transition.type`, `unknown transition "${t.type}" — will fall back to a dissolve`);
       if (t.duration !== undefined && (!isNum(t.duration) || t.duration < 0 || t.duration > len)) err(`${p}.transition.duration`, 'transition duration must be 0..scene length');
     }
   });
+
+  (plan.advanced || []).forEach((adv, j) => checkAdvanced(`advanced[${j}]`, adv, err));
 
   const audio = plan.audio || {};
   if (audio.narration) checkAsset('audio.narration.asset', audio.narration.asset);

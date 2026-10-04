@@ -56,7 +56,7 @@ export async function executeBuild(bridge, build, { logger = nullLogger, onProgr
         const units = group.map((id) => { const s = state.get(id); return { id, ops: s.u.alternatives[s.alt].ops.map(([op, args]) => ({ op, args })) }; });
         let res;
         for (let attempt = 0; attempt <= transportRetries; attempt++) {
-          res = await bridge.batch(units, { timeoutMs: undefined });
+          res = await bridge.batch(units, { timeoutMs: Math.max(bridge.config.timeouts.callMs, 30000 + 4000 * units.length) });
           if (res.success || !['TIMEOUT', 'TRANSPORT_ERROR', 'LAUNCH_FAILED', 'BAD_RESPONSE'].includes(res.code)) break;
           logger.warn('transport failure, retrying batch (units are idempotent)', { stage: stage.id, attempt, error: res.error });
           await sleep(500 * (attempt + 1));

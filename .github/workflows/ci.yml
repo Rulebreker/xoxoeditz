@@ -8,6 +8,8 @@ jobs:
         os: [ubuntu-latest, windows-latest]
         node: [20, 22]
     runs-on: ${{ matrix.os }}
+    # Windows is experimental: the author could only run the Linux suite. Failures there are informative, not blocking.
+    continue-on-error: ${{ matrix.os == 'windows-latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

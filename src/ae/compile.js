@@ -39,6 +39,13 @@ function effectUnit({ id, label, effectId, caps, ctx, pre = [], post = [], names
   };
 }
 
+/** User-specified typed host ops. "$COMP" / "$MASTER" in a `comp` argument are replaced with real comp names. */
+function advancedUnit(adv, id, comp, master) {
+  const sub = (v) => (v === '$COMP' ? comp : v === '$MASTER' ? master : v);
+  const ops = adv.ops.map((o) => [o.op, { ...o.args, comp: sub(o.args?.comp ?? '$COMP') }]);
+  return { id, label: adv.label || id, optional: adv.optional !== false, primary: null, names: [], alternatives: [{ name: 'advanced', quality: 1, ops }] };
+}
+
 const importFolder = (a) => (a.type === 'video' ? '20_FOOTAGE/Video' : a.type === 'image' ? '20_FOOTAGE/Stills' : '30_AUDIO');
 
 /**
@@ -122,6 +129,7 @@ export function compilePlan(plan, { manifest, narration = null, caps = {}, sfxCu
       units.push(u);
       for (const n of u.notes) notes.push(`${s.id} ${g.kind}: ${n}`);
     });
+    (s.advanced || []).forEach((adv, j) => units.push(advancedUnit(adv, `${s.id}.advanced.${j + 1}`, comp, MASTER)));
     stages.push({ id: `scene.${s.id}`, label: `Scene ${s.id} (${comp})`, units });
   });
 
@@ -154,6 +162,7 @@ export function compilePlan(plan, { manifest, narration = null, caps = {}, sfxCu
       alternatives: [{ name: 'fade', quality: 1, ops: [['keyframes', { comp: MASTER, layer: sceneLayerName(plan.scenes.length - 1), prop: 'opacity', keys: [{ t: end - endFade, v: 100 }, { t: end, v: 0 }], ease: 'easeIn', clear: false }]] }],
     });
   }
+  (plan.advanced || []).forEach((adv, j) => mu.push(advancedUnit(adv, `master.advanced.${j + 1}`, MASTER, MASTER)));
   stages.push({ id: 'master', label: 'Master timeline & transitions', units: mu });
 
   // ---------- stage: audio ----------

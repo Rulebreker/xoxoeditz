@@ -1,4 +1,4 @@
-// XOXOEDITZ host — render queue (ES3 only). Rendering itself is done by aerender / Media Encoder.
+// XOXOEDITZ host -- render queue (ES3 only). Rendering itself is done by aerender / Media Encoder.
 
 XOXO.op("rq_clear", function (a) {
   var rq = app.project.renderQueue;

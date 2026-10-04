@@ -1,4 +1,4 @@
-// XOXOEDITZ host — effects (ES3 only). Availability is checked here; fallback policy lives in Node.
+// XOXOEDITZ host -- effects (ES3 only). Availability is checked here; fallback policy lives in Node.
 
 XOXO.effectAvailable = function (matchName) {
   if (typeof app.effects === "undefined") return null; // unknown

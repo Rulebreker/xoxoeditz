@@ -17,7 +17,7 @@ export function walk(root, { maxFiles = 20000, maxDepth = 8 } = {}) {
     try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
     entries.sort((a, b) => a.name.localeCompare(b.name, 'en', { numeric: true }));
     for (const e of entries) {
-      if (e.name.startsWith('.') || SKIP_DIRS.has(e.name)) continue;
+      if (e.name.startsWith('.') || SKIP_DIRS.has(e.name) || (depth === 0 && /^readme(\.\w+)?$/i.test(e.name))) continue;
       const full = path.join(dir, e.name);
       let real;
       try { real = fs.realpathSync(full); } catch { continue; }
@@ -119,7 +119,7 @@ export async function makeThumbnails(config, manifest, outDir, { width = 640, on
   for (const a of manifest.assets) {
     if (!['video', 'image'].includes(a.type) || (only && !only.includes(a.id))) continue;
     const out = path.join(outDir, `${a.id}.jpg`);
-    const args = ['-v', 'error', '-y'];
+    const args = ['-v', 'error', '-y', '-protocol_whitelist', 'file'];
     if (a.type === 'video') args.push('-ss', String(Math.max(0, (a.meta?.duration || 0) / 3).toFixed(2)));
     args.push('-i', a.path, '-frames:v', '1', '-vf', `scale='min(${width},iw)':-2`, out);
     const r = await run(config.ffmpeg, args, { timeoutMs: 60000 });

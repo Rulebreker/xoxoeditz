@@ -43,6 +43,7 @@ Everything is auto-detected. Override only if needed, in `xoxo.config.json` (git
 | `transport` | `XOXO_TRANSPORT` | `auto` (default) · `listener` · `cli` · `mock` |
 | `bridgeDir` | `XOXO_BRIDGE_DIR` | where job files live |
 | `allowRawEval` | `XOXO_ALLOW_RAW_EVAL=1` | allow arbitrary ExtendScript (**off**) |
+| (root folder) | `XOXO_ROOT` | where `assets/`, `projects/`, `.xoxo/` live (default: the repository) |
 
 ## macOS / Linux
 macOS: discovery and the AppleScript launch path exist but are **untested**. Linux: no After Effects; use

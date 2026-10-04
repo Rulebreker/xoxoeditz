@@ -25,8 +25,10 @@ import { repairIssues } from '../qa/repair.js';
 import { renderProject } from '../render/index.js';
 import { describeCapabilities } from '../effects/registry.js';
 import { isAeRunning } from '../detect/tools.js';
+import { readInstallManifest, uninstallAll } from '../core/install-manifest.js';
 
-export function createContext({ cwd = REPO_ROOT, env = process.env, overrides = {}, echo = false, mockAE = null } = {}) {
+export function createContext({ cwd, env = process.env, overrides = {}, echo = false, mockAE = null } = {}) {
+  cwd ??= env.XOXO_ROOT || REPO_ROOT; // XOXO_ROOT relocates assets/projects/.xoxo (used by tests and shared installs)
   const config = loadConfig({ cwd, env, overrides });
   const logger = createLogger({ dir: config.logDir, level: config.logLevel, echo });
   return { config, logger, env, mockAE };
@@ -145,6 +147,9 @@ export async function bridgeInstall(ctx, { startup = false } = {}) {
     return { ...r, next: ['Start the live listener (optional, faster): in After Effects choose File > Scripts > Run Script File… and pick ' + r.listenerFile, 'Or do nothing: the one-shot transport launches scripts through AfterFX -r on demand.', 'Enable Preferences > Scripting & Expressions > "Allow Scripts to Write Files and Access Network".'] };
   });
 }
+
+export const bridgeUninstall = (ctx) => attempt('bridge_uninstall', () => ({ ...uninstallAll(ctx.config), manifest: readInstallManifest(ctx.config) }));
+export const installManifest = (ctx) => attempt('install_manifest', () => readInstallManifest(ctx.config));
 
 export async function openBridge(ctx, { dryRun = false } = {}) {
   const caps = await getCapabilities(ctx);
@@ -279,6 +284,10 @@ export async function runVerify(ctx, { bridge, caps, prj, plan, build, manifest,
   }
   qa.repairs = repairs;
   qa.dryRun = dryRun;
+  if (repairs.some((r) => r.success)) { // repairs live in the open project: persist them
+    const saved = await bridge.call('project_save', { path: prj.paths.aep.replace(/\\/g, '/') });
+    if (!saved.success) qa.warnings.push({ check: 'PROJECT_CHECK', code: 'SAVE_AFTER_REPAIR_FAILED', severity: 'warning', message: `repairs were applied but the project could not be saved: ${saved.error}` });
+  }
   writeJson(prj.paths.qa, qa);
   return { success: qa.passed, operation: 'verify', data: { passed: qa.passed, summary: qa.summary, errors: qa.errors, warnings: qa.warnings.slice(0, 40), fallbacks_used: qa.fallbacks_used, repairs, report: prj.paths.qa }, ...(qa.passed ? {} : { error: `QA failed: ${qa.summary}`, recoverable: true }) };
 }
@@ -299,8 +308,6 @@ export function editProject(ctx, name, { dryRun = false, verify = true, repair =
         const v = await runVerify(ctx, { bridge, caps: built._caps, prj, plan: built._plan, build: built._build, manifest: built._manifest, report: built.data, repair, outputPath: path.join(prj.paths.renders, 'x.mp4'), dryRun: mock });
         out.qa = v.data ?? { passed: false, error: v.error };
         if (v.success !== undefined) out.qaPassed = v.success;
-        // repairs may have changed the project: save again
-        if (v.data?.repairs?.length) await bridge.call('project_save', { path: prj.paths.aep.replace(/\\/g, '/') });
       }
       const success = built.success && (!verify || out.qaPassed);
       return { success, operation: 'edit', data: out, ...(success ? {} : { error: !built.success ? built.error : `QA failed: ${out.qa?.summary || out.qa?.error}`, recoverable: true }) };

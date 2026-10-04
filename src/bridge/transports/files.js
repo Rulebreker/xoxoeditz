@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { ensureDir, toAePath } from '../../core/paths.js';
+import { ensureDir, toAePath, asciiJson } from '../../core/paths.js';
 import { sleep, launchDetached, run } from '../../core/exec.js';
 import { buildHostBundle } from '../host-bundle.js';
 
@@ -10,7 +10,7 @@ async function waitForFile(file, timeoutMs, pollMs = 120) {
     if (fs.existsSync(file)) {
       // host writes tmp+rename, so existence means complete; retry parse once for slow disks
       for (let i = 0; i < 5; i++) {
-        try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { await sleep(60); }
+        try { return JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '')); } catch { await sleep(60); }
       }
     }
     await sleep(pollMs);
@@ -43,7 +43,7 @@ export class CliTransport {
     const scriptFile = path.join(this.dir, `${id}.jsx`);
     const resultFile = path.join(this.dir, `${id}.result.json`);
     fs.writeFileSync(jobFile, JSON.stringify(request));
-    fs.writeFileSync(scriptFile, `${this.bundle}\nXOXO.runJobFile(${JSON.stringify(toAePath(jobFile))});\n`);
+    fs.writeFileSync(scriptFile, `${this.bundle}\nXOXO.runJobFile(${asciiJson(toAePath(jobFile))});\n`);
 
     const wasRunning = await this.isRunning();
     const launched = await this._launch(scriptFile);

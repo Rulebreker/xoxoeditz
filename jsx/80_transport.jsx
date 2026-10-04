@@ -1,4 +1,4 @@
-// XOXOEDITZ host — file transports (ES3 only).
+// XOXOEDITZ host -- file transports (ES3 only).
 //   One-shot:  AfterFX -r <job>.jsx  ->  XOXO.runJobFile(<job>.job.json)  ->  <job>.result.json
 //   Listener:  XOXO.startListener(dir)  polls dir/inbox/*.req.json and writes dir/outbox/<id>.res.json
 
@@ -9,6 +9,7 @@ XOXO.readText = function (path) {
   if (!f.open("r")) throw XOXO.err("cannot open for reading: " + path + " (" + f.error + ")", "IO_ERROR", true);
   var s = f.read();
   f.close();
+  if (s.length && s.charCodeAt(0) === 65279) s = s.substring(1); // strip a UTF-8 BOM if present
   return s;
 };
 
@@ -16,7 +17,7 @@ XOXO.writeText = function (path, text) {
   var tmp = new File(path + ".tmp");
   tmp.encoding = "UTF-8";
   if (!tmp.open("w")) {
-    throw XOXO.err("cannot write " + path + " — enable Preferences > Scripting & Expressions > 'Allow Scripts to Write Files and Access Network'", "FILE_ACCESS_DENIED", true);
+    throw XOXO.err("cannot write " + path + " -- enable Preferences > Scripting & Expressions > 'Allow Scripts to Write Files and Access Network'", "FILE_ACCESS_DENIED", true);
   }
   tmp.write(text);
   tmp.close();

@@ -63,7 +63,7 @@ export const REGISTRY = {
       { id: 'linear_wipe', quality: 1, requires: { effects: [fx('ADBE Linear Wipe', 'Linear Wipe')] },
         build: (c, r) => [
           ['layer_move', { comp: c.comp, layer: c.outgoing, to: { before: c.incoming } }],
-          ['layer_effect_add', { comp: c.comp, layer: c.outgoing, matchName: r.effects['ADBE Linear Wipe'], tag: 'wipe', params: { 'Wipe Angle': 90, Feather: 40 } }],
+          ['layer_effect_add', { comp: c.comp, layer: c.outgoing, matchName: r.effects['ADBE Linear Wipe'], name: 'Linear Wipe', tag: 'wipe', params: { 'Wipe Angle': 90, Feather: 40 } }],
           ['effect_param_keys', { comp: c.comp, layer: c.outgoing, effect: 'XOXO:wipe:Linear Wipe', param: 'Transition Completion', keys: [T(c.t, 0), T(c.t + c.d, 100)] }],
         ] },
       { id: 'slide_instead', quality: 0.5, requires: {}, build: (c) => [key(c.comp, c.incoming, 'position', [T(c.t, [c.w * 1.5, c.h / 2]), T(c.t + c.d, [c.w / 2, c.h / 2])], 'easeOut')] },
@@ -75,7 +75,7 @@ export const REGISTRY = {
     implementations: [
       { id: 'turbulent_displace', quality: 1, requires: { effects: [fx('ADBE Turbulent Displace', 'Turbulent Displace')] },
         build: (c, r) => [
-          ['layer_effect_add', { comp: c.comp, layer: c.incoming, matchName: r.effects['ADBE Turbulent Displace'], tag: 'glitch', params: { Amount: 0, Size: 40 } }],
+          ['layer_effect_add', { comp: c.comp, layer: c.incoming, matchName: r.effects['ADBE Turbulent Displace'], name: 'Turbulent Displace', tag: 'glitch', params: { Amount: 0, Size: 40 } }],
           ['effect_param_keys', { comp: c.comp, layer: c.incoming, effect: 'XOXO:glitch:Turbulent Displace', param: 'Amount', keys: [T(c.t, 160), T(c.t + c.d * 0.5, 60), T(c.t + c.d, 0)] }],
           key(c.comp, c.incoming, 'opacity', [T(c.t, 0), T(c.t + c.d * 0.25, 100)], 'linear'),
         ] },

@@ -2,13 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { tmpDir } from './helpers/env.js';
+import { fileURLToPath } from 'node:url';
+import { tmpDir, NO_FAKE_EXE } from './helpers/env.js';
 import { hasFfmpeg, makeAssetFolder } from './helpers/media.js';
 import { createContext, newProject, scanProject, analyzeProjectNarration, scaffoldProjectPlan, validateProjectPlan, editProject, verifyProject, renderProjectCmd, statusProject, detect } from '../src/app/services.js';
 import { createMockAE } from '../src/bridge/mock-ae.js';
 import { readJson } from '../src/core/paths.js';
 
-const FAKE_AERENDER = path.resolve(path.dirname(new URL(import.meta.url).pathname), 'helpers', 'fake-aerender.mjs');
+const FAKE_AERENDER = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'helpers', 'fake-aerender.mjs');
 const SCRIPT = 'The Chengdu J-20 is a fifth generation stealth fighter. It can reach Mach 2.0 at altitude. The jet entered service in 2017, with a range of 2,000 km. Few aircraft combine stealth and speed this way.';
 
 async function project({ effects, resolution = '720p', transport = 'mock' } = {}) {
@@ -141,7 +142,7 @@ test('QA auto-repair: text pushed out of frame is moved back and the audio duck 
   assert.ok(v.data.repairs.every((r) => r.success));
 });
 
-test('render with aerender + FFmpeg transcode, then verification of the real file', { skip: !hasFfmpeg }, async () => {
+test('render with aerender + FFmpeg transcode, then verification of the real file', { skip: !hasFfmpeg || NO_FAKE_EXE }, async () => {
   const { ctx } = await project();
   assert.equal((await editProject(ctx, 'j20')).success, true);
   const preview = await renderProjectCmd(ctx, 'j20', { preview: true, range: '1:3' });

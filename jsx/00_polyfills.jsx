@@ -1,4 +1,4 @@
-// XOXOEDITZ host — polyfills. ExtendScript is ES3: no JSON, no Array.map/forEach/indexOf.
+// XOXOEDITZ host -- polyfills. ExtendScript is ES3: no JSON, no Array.map/forEach/indexOf.
 // This file MUST stay ES3-compatible (enforced by scripts/lint-jsx.js).
 
 if (typeof JSON === "undefined" || typeof JSON.parse !== "function") {

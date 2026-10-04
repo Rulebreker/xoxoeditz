@@ -1,4 +1,4 @@
-// XOXOEDITZ host — project inspection for QA (ES3 only). Read-only.
+// XOXOEDITZ host -- project inspection for QA (ES3 only). Read-only.
 
 XOXO.layerKind = function (l) {
   if (l instanceof TextLayer) return "text";

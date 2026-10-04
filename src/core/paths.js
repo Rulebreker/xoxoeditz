@@ -65,3 +65,9 @@ export function writeJson(file, data) {
 
 /** Convert a path to forward-slash form for embedding in ExtendScript. */
 export const toAePath = (p) => path.resolve(p).replace(/\\/g, '/');
+
+/**
+ * JSON.stringify that emits only ASCII (non-ASCII as \uXXXX). ExtendScript reads script files in the system
+ * encoding unless they carry a BOM, so anything embedded in generated .jsx must be pure ASCII.
+ */
+export const asciiJson = (v) => JSON.stringify(v).replace(/[\u0080-\uffff]/g, (c) => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'));

@@ -81,7 +81,8 @@ are hard-coded; nothing user-specific is committed. See [SECURITY.md](SECURITY.m
 
 * Not yet validated in real After Effects (see status above). Property paths for text animators / shape trim paths
   and effect parameter names are the most likely things to need version-specific tweaks — each has a fallback.
-* `map` graphics, parallax, per-word caption emphasis, 3D camera rigs and Lumetri-based grading are **TODO**.
+* `map` graphics, parallax, freeze frames/time-remap, per-word caption emphasis, preset 3D camera rigs and Lumetri-based grading are **TODO** (3D cameras, mattes, masks and blend modes are reachable today through `advanced` ops).
+* Whisper transcription is wired to the `openai-whisper` CLI's JSON output but has not been run against a real install.
 * Quality of auto-synthesised SFX is basic; supply real SFX/music for premium results.
 * Creative quality comes from Claude following the Director rules — the built-in baseline director is a draft.
 

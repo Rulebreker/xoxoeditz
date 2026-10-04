@@ -79,7 +79,7 @@ export async function renderProject(opts) {
   const finalPath = plan.output.path && !preview ? path.resolve(paths.root, plan.output.path) : path.join(paths.renders, `${base}${ext}`);
   ensureDir(path.dirname(finalPath));
   const interExt = '.mov';
-  const interPath = path.join(paths.renders, `${base}_intermediate${interExt}`);
+  let interPath = path.join(paths.renders, `${base}_intermediate${interExt}`);
 
   const startFrame = range ? Math.round(t0 * fps) : undefined;
   const endFrame = range ? Math.max(Math.round(t1 * fps) - 1, startFrame ?? 0) : undefined;
@@ -114,7 +114,11 @@ export async function renderProject(opts) {
   steps.push(`aerender finished: ${r.frames} frames in ${((Date.now() - t) / 1000).toFixed(1)}s`);
 
   if (strategy.name === 'aerender+ffmpeg') {
-    if (!fs.existsSync(interPath)) return fail(`aerender reported success but ${interPath} was not written (check the output module template)`);
+    // After Effects may change the extension to suit the output module (e.g. .mov vs .avi)
+    const stem = path.basename(interPath, interExt);
+    const found = fs.readdirSync(paths.renders).find((f) => f.startsWith(stem));
+    if (!found) return fail(`aerender reported success but no file named ${stem}.* appeared in ${paths.renders} (check the output module template "${strategy.omTemplate}")`);
+    interPath = path.join(paths.renders, found);
     onProgress({ phase: 'transcode' });
     const tr = await run(config.ffmpeg, transcodeArgs(interPath, finalPath, plan, { preview, scaleWidth: preview ? 960 : null }), { timeoutMs: config.timeouts.renderMs });
     if (tr.error || tr.code !== 0) return fail(`ffmpeg transcode failed: ${tr.error || tr.stderr.split('\n').slice(-3).join(' ')}`);

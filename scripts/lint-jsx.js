@@ -31,6 +31,7 @@ export function stripNoise(src) {
 
 export function lintSource(name, src) {
   const problems = [];
+  src.split('\n').forEach((line, i) => { if (/[^\x00-\x7f]/.test(line)) problems.push(`${name}:${i + 1}: non-ASCII character (ExtendScript reads files in the system encoding): ${line.trim().slice(0, 60)}`); });
   const lines = stripNoise(src).split('\n');
   lines.forEach((line, i) => {
     for (const [re, label] of RULES) {

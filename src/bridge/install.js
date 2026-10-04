@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { buildHostBundle } from './host-bundle.js';
-import { ensureDir, toAePath } from '../core/paths.js';
+import { ensureDir, toAePath, asciiJson } from '../core/paths.js';
+import { recordInstall } from '../core/install-manifest.js';
 
 /**
  * Write the host bundle + listener script into the bridge dir. Optionally drop a tiny loader into After
@@ -14,7 +15,7 @@ export function installBridge(config, { install = null, startup = false } = {}) 
   const hostFile = path.join(dir, 'host.jsx');
   const listenerFile = path.join(dir, 'listener.jsx');
   fs.writeFileSync(hostFile, bundle);
-  fs.writeFileSync(listenerFile, `${bundle}\nXOXO.startListener(${JSON.stringify(toAePath(dir))});\n`);
+  fs.writeFileSync(listenerFile, `${bundle}\nXOXO.startListener(${asciiJson(toAePath(dir))});\n`);
   const out = { dir, hostFile, listenerFile, startup: null };
 
   if (startup) {
@@ -22,8 +23,9 @@ export function installBridge(config, { install = null, startup = false } = {}) 
       out.startup = { ok: false, error: 'After Effects Scripts/Startup folder not found' };
     } else {
       const loader = path.join(install.startupDir, 'xoxo_listener.jsx');
-      const src = `// XOXOEDITZ listener loader (installed by \`xoxo bridge install --startup\`)\n#include ${JSON.stringify(toAePath(listenerFile))}\n`;
-      try { fs.writeFileSync(loader, src); out.startup = { ok: true, file: loader }; }
+      // BOM so ExtendScript reads the (possibly non-ASCII) include path as UTF-8
+      const src = `\ufeff// XOXOEDITZ listener loader (installed by xoxo bridge install --startup)\n#include ${JSON.stringify(toAePath(listenerFile))}\n`;
+      try { fs.writeFileSync(loader, src); recordInstall(config, { file: loader, kind: 'after-effects-startup-script', purpose: 'starts the XOXOEDITZ listener with After Effects' }); out.startup = { ok: true, file: loader }; }
       catch (e) { out.startup = { ok: false, error: `${e.code || e.message} — run your terminal as Administrator, or load listener.jsx manually (File > Scripts > Run Script File)` }; }
     }
   }

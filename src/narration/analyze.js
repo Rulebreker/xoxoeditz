@@ -25,7 +25,7 @@ export function parseVolumeDetect(stderr) {
 }
 
 export async function measureAudio(config, file, { noiseDb = -35, minSilence = 0.35 } = {}) {
-  const r = await run(config.ffmpeg, ['-hide_banner', '-nostats', '-i', file, '-af', `silencedetect=noise=${noiseDb}dB:d=${minSilence},volumedetect`, '-f', 'null', '-'], { timeoutMs: 10 * 60 * 1000 });
+  const r = await run(config.ffmpeg, ['-hide_banner', '-nostats', '-protocol_whitelist', 'file', '-i', file, '-af', `silencedetect=noise=${noiseDb}dB:d=${minSilence},volumedetect`, '-f', 'null', '-'], { timeoutMs: 10 * 60 * 1000 });
   if (r.error) throw new Error(`ffmpeg unavailable: ${r.error}`);
   const dur = /Duration:\s*(\d+):(\d+):([\d.]+)/.exec(r.stderr);
   const duration = dur ? Number(dur[1]) * 3600 + Number(dur[2]) * 60 + Number(dur[3]) : null;

@@ -53,3 +53,47 @@ test('validator gives actionable errors', () => {
   assert.ok(v.warnings.some((w) => /not implemented/.test(w.message)));
   assert.equal(validatePlan(null).valid, false);
 });
+
+test('advanced ops: validated, comp substitution, runs idempotently in the build', { skip: !hasFfmpeg }, async () => {
+  const { validatePlan: vp } = await import('../src/plan/schema.js');
+  const bad = vp({ title: 't', scenes: [{ id: 'S01', start: 0, end: 5, advanced: [{ ops: [{ op: 'raw_eval', args: {} }, { op: 'nope', args: {} }] }, { ops: [] }] }] }, {});
+  assert.equal(bad.errors.length, 3);
+  const root = tmpDir('xoxo-adv-');
+  const assets = makeAssetFolder(path.join(root, 'assets'));
+  const ctx = createContext({ cwd: root, env: {}, overrides: { transport: 'mock' } });
+  await newProject(ctx, 'adv', { assets }); await scanProject(ctx, 'adv');
+  const plan = JSON.parse(fs.readFileSync(path.resolve('examples/plan.example.json'), 'utf8'));
+  plan.scenes[0].advanced = [{ label: '3D camera', ops: [
+    { op: 'layers_remove', args: { names: ['CAM_MAIN'] } },
+    { op: 'layer_add_camera', args: { name: 'CAM_MAIN' } },
+    { op: 'set_property', args: { layer: 'IMG_J20_FRONT', prop: 'opacity', value: 80 } },
+    { op: 'layer_set', args: { layer: 'IMG_J20_FRONT', props: { blend: 'screen', threeD: true } } }] }];
+  plan.advanced = [{ ops: [{ op: 'marker_add', args: { comp: '$MASTER', time: 1, comment: 'hello' } }] }];
+  fs.writeFileSync(path.join(ctx.config.projectsDir, 'adv', 'plan.json'), JSON.stringify(plan));
+  const r1 = await editProject(ctx, 'adv');
+  assert.equal(r1.success, true, JSON.stringify(r1.data?.build?.errors || r1.error));
+  const { openBridge } = await import('../src/app/services.js');
+  const inspect = async () => (await (await openBridge(ctx)).bridge.call('inspect', {})).data.items.find((i) => i.name === 'COMP_SCENE_01');
+  const a = await inspect();
+  assert.equal(a.layers.filter((l) => l.name === 'CAM_MAIN').length, 1);
+  assert.equal(a.layers.find((l) => l.name === 'IMG_J20_FRONT').threeD, true);
+  await editProject(ctx, 'adv');
+  const b = await inspect();
+  assert.equal(b.layers.filter((l) => l.name === 'CAM_MAIN').length, 1, 'rebuild does not duplicate the camera');
+});
+
+test('install manifest records and removes what is written outside the repo', async () => {
+  const { installBridge } = await import('../src/bridge/install.js');
+  const { readInstallManifest, uninstallAll } = await import('../src/core/install-manifest.js');
+  const { testConfig } = await import('./helpers/env.js');
+  const cfg = testConfig();
+  const startupDir = tmpDir('ae-startup-');
+  const r = installBridge(cfg, { install: { startupDir }, startup: true });
+  assert.equal(r.startup.ok, true);
+  assert.equal(readInstallManifest(cfg).entries.length, 1);
+  assert.ok(fs.existsSync(r.startup.file));
+  const u = uninstallAll(cfg);
+  assert.deepEqual(u.removed, [r.startup.file]);
+  assert.equal(fs.existsSync(r.startup.file), false);
+  assert.equal(readInstallManifest(cfg).entries.length, 0);
+});

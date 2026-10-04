@@ -1,4 +1,4 @@
-// XOXOEDITZ host — core: op registry, request handling, shared helpers (ES3 only).
+// XOXOEDITZ host -- core: op registry, request handling, shared helpers (ES3 only).
 
 var XOXO = $.global.XOXO = ($.global.XOXO && $.global.XOXO.ops) ? $.global.XOXO : { ops: {} };
 XOXO.version = "0.1.0";

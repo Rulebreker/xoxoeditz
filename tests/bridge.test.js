@@ -5,7 +5,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { createBridge, selectTransport } from '../src/bridge/client.js';
 import { installBridge } from '../src/bridge/install.js';
-import { testConfig, tmpDir, FAKE_AE } from './helpers/env.js';
+import { testConfig, tmpDir, FAKE_AE, NO_FAKE_EXE } from './helpers/env.js';
 import { sleep } from '../src/core/exec.js';
 
 const states = [];
@@ -36,7 +36,7 @@ test('mock transport: bridge call, batch, raw_eval gating', async () => {
   assert.equal((await b2.call('raw_eval', { code: '40+2' })).data.value, '42');
 });
 
-test('cli transport: cold start, then forwarding to the running instance', async () => {
+test('cli transport: cold start, then forwarding to the running instance', { skip: NO_FAKE_EXE }, async () => {
   const state = freshState({ FAKE_AE_COLD_MS: '300' });
   const cfg = testConfig({ transport: 'cli', aePath: FAKE_AE, timeouts: { callMs: 8000, coldStartMs: 15000, renderMs: 1000 } });
   const b = await createBridge(cfg);
@@ -55,7 +55,7 @@ test('cli transport: cold start, then forwarding to the running instance', async
   await b.close();
 });
 
-test('cli transport: unanswered job reports TIMEOUT with the actionable cause', async () => {
+test('cli transport: unanswered job reports TIMEOUT with the actionable cause', { skip: NO_FAKE_EXE }, async () => {
   freshState({ FAKE_AE_NO_FILE_ACCESS: '1' });
   const cfg = testConfig({ transport: 'cli', aePath: FAKE_AE, timeouts: { callMs: 900, coldStartMs: 900, renderMs: 1000 } });
   const b = await createBridge(cfg);
@@ -67,7 +67,7 @@ test('cli transport: unanswered job reports TIMEOUT with the actionable cause', 
   delete process.env.FAKE_AE_NO_FILE_ACCESS;
 });
 
-test('listener transport: install, start inside the app, auto-selected over cli', async () => {
+test('listener transport: install, start inside the app, auto-selected over cli', { skip: NO_FAKE_EXE }, async () => {
   const state = freshState();
   const cfg = testConfig({ transport: 'auto', aePath: FAKE_AE, timeouts: { callMs: 8000, coldStartMs: 8000, renderMs: 1000 } });
   const inst = installBridge(cfg);
@@ -104,4 +104,17 @@ test('startup installer reports missing Startup folder without throwing', () => 
   const r2 = installBridge(cfg, { install: { startupDir: dir }, startup: true });
   assert.equal(r2.startup.ok, true);
   assert.match(fs.readFileSync(r2.startup.file, 'utf8'), /#include ".*listener\.jsx"/);
+});
+
+test('results with a UTF-8 BOM (as ExtendScript may write them) are still parsed', { skip: NO_FAKE_EXE }, async () => {
+  const cfg = testConfig({ transport: 'cli', aePath: FAKE_AE, timeouts: { callMs: 4000, coldStartMs: 4000, renderMs: 1000 } });
+  const { CliTransport } = await import('../src/bridge/transports/files.js');
+  const t = new CliTransport({ config: cfg, afterfx: FAKE_AE, platform: 'linux' });
+  t._launch = async (script) => {
+    const job = /runJobFile\("([^"]+)"\)/.exec(fs.readFileSync(script, 'utf8'))[1];
+    fs.writeFileSync(job.replace(/\.job\.json$/, '.result.json'), '﻿' + JSON.stringify({ id: 'bom', success: true, data: { ok: 1 } }));
+    return { ok: true };
+  };
+  const r = await t.send({ id: 'bom', op: 'ping', args: {} });
+  assert.equal(r.success, true);
 });

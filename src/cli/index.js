@@ -28,7 +28,7 @@ ${bold('Setup & tools')}
   xoxo setup [--startup]             install bridge scripts, run doctor
   xoxo detect                        rebuild the capability registry (.xoxo/capabilities.json)
   xoxo effects                       effect fallback chains for this machine
-  xoxo bridge install|ping|stop|ops|call <op> [json]
+  xoxo bridge install|ping|stop|ops|installed|uninstall|call <op> [json]
   xoxo sfx <whoosh|impact|riser|tick> [--out file]
   xoxo selftest [--dry-run]          end-to-end smoke test with generated media
   xoxo mcp                           MCP server on stdio (used by Claude Code)
@@ -93,7 +93,13 @@ export async function main(argv) {
         if (o.scaffold) return emit(o, await S.scaffoldProjectPlan(ctx, name, { title: o.title, brief: o.brief, style: o.style, resolution: o.resolution, aspect: o.aspect, fps: o.fps, captions: o['no-captions'] ? false : (o.captions ? true : undefined), force: o.force }), (d) => `${green('✓')} plan written: ${d.plan}\n  ${d.scenes} scenes, style ${d.style}\n  ${d.validation.valid ? green('valid') : red('INVALID')} (${d.validation.errors.length} errors, ${d.validation.warnings.length} warnings)\n${dim(d.note)}`);
         if (o.show) { const n = S.resolveProjectName(ctx, name); const p = readJson(path.join(ctx.config.projectsDir, n, 'plan.json')); console.log(JSON.stringify(p, null, 2)); return 0; }
         const r = await S.validateProjectPlan(ctx, name);
-        return emit(o, r, (d) => `${green('✓')} plan valid: ${d.scenes} scenes, ${d.duration}s, ${d.output.width}x${d.output.height}@${d.output.fps}\n${d.warnings.map((w) => `  ${red('!')} ${w.path}: ${w.message}`).join('\n')}`) || (r.success ? 0 : (o.json ? 1 : (console.log((r.data?.errors || []).map((e) => `  ${red('✗')} ${e.path}: ${e.message}`).join('\n')), 1)));
+        if (!r.success && !o.json) {
+          console.log(red(`✗ ${r.error || 'plan is invalid'}`));
+          for (const e of r.data?.errors || []) console.log(`  ${red('✗')} ${e.path}: ${e.message}`);
+          for (const w of r.data?.warnings || []) console.log(`  ${red('!')} ${w.path}: ${w.message}`);
+          return 1;
+        }
+        return emit(o, r, (d) => `${green('✓')} plan valid: ${d.scenes} scenes, ${d.duration}s, ${d.output.width}x${d.output.height}@${d.output.fps}\n${d.warnings.map((w) => `  ${red('!')} ${w.path}: ${w.message}`).join('\n')}`);
       }
       case 'edit': {
         const progress = o.json ? undefined : (p) => { if (p.status === 'start') process.stderr.write(dim(`  → ${p.label}\n`)); };
@@ -130,13 +136,15 @@ async function bridgeCmd(ctx, o, pos) {
   const sub = pos[0];
   if (sub === 'install') return emit(o, await S.bridgeInstall(ctx, { startup: o.startup }), (d) => [`${green('✓')} installed to ${d.dir}`, ...d.next.map((n) => `  • ${n}`), ...(d.startup ? [d.startup.ok ? `  ${green('✓')} startup loader: ${d.startup.file}` : `  ${red('!')} startup loader: ${d.startup.error}`] : [])].join('\n'));
   if (sub === 'ping') return emit(o, await S.bridgePing(ctx), (d) => `${green('✓')} connected via ${d.transport}: After Effects ${d.host.aeVersion} on ${d.host.os}, ${d.effects} effects visible${d.host.scriptsMayWriteFiles === false ? red('\n  scripting file access is OFF') : ''}`);
+  if (sub === 'uninstall') return emit(o, await S.bridgeUninstall(ctx), (d) => `${green('✓')} removed ${d.removed.length} installed file(s)${d.failed.length ? red(' — failed: ' + JSON.stringify(d.failed)) : ''}`);
+  if (sub === 'installed') return emit(o, await S.installManifest(ctx), (d) => (d.entries.length ? d.entries.map((e) => `${e.file}  (${e.kind}, ${e.at})`).join('\n') : 'XOXOEDITZ has installed nothing outside its own folders.'));
   if (sub === 'stop') { const { stopListenerFile } = await import('../bridge/install.js'); ensureDir(ctx.config.bridgeDir); stopListenerFile(ctx.config); console.log('stop signal written'); return 0; }
   if (sub === 'ops') { for (const [k, d] of Object.entries(OPS_DOC)) console.log(`${k.padEnd(22)} ${d.args}\n    ${d.doc}`); return 0; }
   if (sub === 'call') {
     let args = {}; if (pos[2]) { try { args = JSON.parse(pos[2]); } catch { console.error('args must be JSON'); return 2; } }
     return emit(o, await S.bridgeCall(ctx, pos[1], args, { dryRun: o['dry-run'] }), (d) => JSON.stringify(d, null, 2));
   }
-  console.error('usage: xoxo bridge install|ping|stop|ops|call <op> [json]'); return 2;
+  console.error('usage: xoxo bridge install|ping|stop|ops|installed|uninstall|call <op> [json]'); return 2;
 }
 
 async function auto(ctx, o, pos) {

@@ -1,4 +1,4 @@
-// XOXOEDITZ host — properties, keyframes, expressions, text animators (ES3 only).
+// XOXOEDITZ host -- properties, keyframes, expressions, text animators (ES3 only).
 
 XOXO.op("set_property", function (a) {
   XOXO.need(a, ["comp", "layer", "prop", "value"]);
@@ -91,7 +91,9 @@ XOXO.op("text_reveal", function (a) {
   var an = animators.addProperty("ADBE Text Animator");
   an.name = "XOXO Reveal";
   var props = an.property("ADBE Text Animator Properties");
-  var sel = an.property("ADBE Text Selectors").addProperty("ADBE Text Selector");
+  // A scripted animator may or may not come with a default Range Selector: reuse it if present, otherwise add one.
+  var selGroup = an.property("ADBE Text Selectors");
+  var sel = (selGroup.numProperties > 0) ? selGroup.property(1) : selGroup.addProperty("ADBE Text Selector");
   props.addProperty("ADBE Text Opacity").setValue(0);
   if (mode === "fade_up") props.addProperty("ADBE Text Position 3D").setValue([0, XOXO.def(a.offset, 40), 0]);
   if (mode === "tracking_in") props.addProperty("ADBE Text Tracking Amount").setValue(XOXO.def(a.tracking, 60));

@@ -1,4 +1,4 @@
-// XOXOEDITZ host — layer creation and layer settings (ES3 only).
+// XOXOEDITZ host -- layer creation and layer settings (ES3 only).
 
 // A freshly added layer is already named after its source, so it must not count as a clash with itself.
 XOXO.nameTaken = function (comp, name, except) {
