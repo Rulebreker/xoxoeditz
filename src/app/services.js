@@ -52,7 +52,7 @@ function pathsFor(ctx, name, { dryRun = false } = {}) {
   const p = projectPaths(ctx.config, name);
   if (dryRun) {
     const d = path.join(p.root, 'dryrun');
-    return { ...p, aep: path.join(d, `${slug(name)}.mock-aep.json`), versions: path.join(d, 'versions'), renders: path.join(d, 'renders') };
+    return { ...p, aep: path.join(d, `${slug(name)}.mock-aep.json`), versions: path.join(d, 'versions'), renders: path.join(d, 'renders'), qa: path.join(d, 'QA_REPORT.json'), buildReport: path.join(d, 'build-report.json'), compiled: path.join(d, 'compiled-plan.json'), lastRender: path.join(d, 'last-render.json'), generated: p.generated, dryRunDir: d };
   }
   return p;
 }
@@ -267,7 +267,7 @@ async function reconstructBuild(ctx, prj, caps) {
 export async function runVerify(ctx, { bridge, caps, prj, plan, build, manifest, report, repair = true, outputPath, dryRun = false }) {
   const t = await inspectProject(bridge);
   if (!t.success) return fail('verify', `could not inspect the project: ${t.error}`, { code: t.code });
-  const qaCtx = (inspect) => ({ plan, manifest, narration: prj.narration, inspect, build, report, caps, config: ctx.config, outputPath });
+  const qaCtx = (inspect) => ({ plan, manifest, narration: prj.narration, inspect, build, report, caps, config: ctx.config, outputPath, dryRun });
   let qa = runQa(qaCtx(t.data));
   let repairs = [];
   if (repair && !qa.passed || (repair && qa.warnings.some((w) => w.repairable))) {
@@ -352,7 +352,7 @@ export function renderProjectCmd(ctx, name, opts = {}) {
       }
       const range = opts.range ? opts.range.split(':').map(Number) : null;
       const r = await renderProject({ config: ctx.config, bridge, caps, plan, paths: prj.paths, preview: Boolean(opts.preview), range, onProgress: opts.onProgress, logger: ctx.logger, preferAme: Boolean(opts.ame), keepIntermediate: Boolean(opts.keepIntermediate) });
-      if (r.success) writeJson(path.join(prj.paths.root, 'last-render.json'), { at: new Date().toISOString(), preview: Boolean(opts.preview), ...r.data });
+      if (r.success) writeJson(prj.paths.lastRender, { at: new Date().toISOString(), preview: Boolean(opts.preview), ...r.data });
       return r;
     } finally { await bridge.close(); }
   });
@@ -364,7 +364,7 @@ export function statusProject(ctx, name) {
     const n = resolveProjectName(ctx, name);
     const p = projectPaths(ctx.config, n);
     const has = (f) => fs.existsSync(f);
-    const manifest = readJson(p.manifest, null); const plan = readJson(p.plan, null); const qa = readJson(p.qa, null); const br = readJson(p.buildReport, null); const lr = readJson(path.join(p.root, 'last-render.json'), null);
+    const manifest = readJson(p.manifest, null); const plan = readJson(p.plan, null); const qa = readJson(p.qa, null); const br = readJson(p.buildReport, null); const lr = readJson(p.lastRender, null); const dr = readJson(path.join(p.root, 'dryrun', 'QA_REPORT.json'), null);
     const steps = {
       assets: manifest ? `${manifest.assets.length} assets` : 'not scanned',
       narration: has(p.narration) ? 'analysed' : 'none',
@@ -373,6 +373,7 @@ export function statusProject(ctx, name) {
       qa: qa ? `${qa.passed ? 'passed' : 'FAILED'} — ${qa.summary}` : 'not run',
       render: lr ? `${lr.output}${lr.preview ? ' (preview)' : ''}` : 'not rendered',
       aep: has(p.aep) ? p.aep : 'none',
+      ...(dr ? { 'dry-run': `simulator QA ${dr.passed ? 'passed' : 'FAILED'} — ${dr.summary} (nothing was built in After Effects)` } : {}),
     };
     const next = !manifest ? `xoxo assets ${n}` : !plan ? `xoxo plan ${n} --scaffold` : !br ? `xoxo edit ${n}` : !qa ? `xoxo verify ${n}` : !qa.passed ? 'fix QA errors in QA_REPORT.json (edit plan.json) and re-run `xoxo edit`' : !lr ? `xoxo render ${n}` : 'done';
     return { project: n, root: p.root, steps, next };

@@ -1,0 +1,12 @@
+{
+  "transport": "auto",
+  "aePath": null,
+  "aerenderPath": null,
+  "ffmpeg": "ffmpeg",
+  "ffprobe": "ffprobe",
+  "whisper": "whisper",
+  "allowRawEval": false,
+  "allowInstall": false,
+  "extraAdobeRoots": [],
+  "timeouts": { "callMs": 120000, "coldStartMs": 300000, "renderMs": 21600000 }
+}

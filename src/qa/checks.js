@@ -162,7 +162,7 @@ export function compositionCheck({ plan, inspect, build }) {
   return out;
 }
 
-export function renderCheck({ plan, caps, config, outputPath }) {
+export function renderCheck({ plan, caps, config, outputPath, dryRun }) {
   const out = [];
   const R = (code, sev, msg, extra) => out.push(issue('RENDER_CHECK', code, sev, msg, extra));
   const dir = path.dirname(outputPath);
@@ -174,7 +174,7 @@ export function renderCheck({ plan, caps, config, outputPath }) {
   } catch { /* statfs unsupported */ }
   const ext = path.extname(outputPath).toLowerCase();
   if (!['.mp4', '.mov', '.mkv', '.webm', '.avi'].includes(ext)) R('OUTPUT_EXT', 'warning', `Unusual output extension "${ext}".`);
-  if (!caps?.aerender && !caps?.media_encoder && config.transport !== 'mock') R('NO_RENDERER', 'error', 'Neither aerender nor Media Encoder was found, so After Effects projects cannot be rendered headlessly.');
+  if (!caps?.aerender && !caps?.media_encoder && config.transport !== 'mock') R('NO_RENDERER', dryRun ? 'warning' : 'error', 'Neither aerender nor Media Encoder was found, so After Effects projects cannot be rendered headlessly.');
   if (!caps?.ffmpeg) R('NO_FFMPEG', 'warning', 'FFmpeg is missing: no H.264 transcode and no automated verification of the rendered file.');
   if (plan.output.width % 2 || plan.output.height % 2) R('ODD_DIMENSIONS', 'error', 'H.264 needs even output dimensions.');
   return out;

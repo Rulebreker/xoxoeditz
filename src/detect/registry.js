@@ -70,7 +70,12 @@ export function saveRegistry(config, reg) {
 }
 
 export function loadRegistry(config) {
-  try { return JSON.parse(fs.readFileSync(config.capabilitiesFile, 'utf8')); } catch { return null; }
+  try {
+    const reg = JSON.parse(fs.readFileSync(config.capabilitiesFile, 'utf8'));
+    // defensive: host facts that came from the simulator are never trusted
+    if (reg?.host?.transport === 'mock') { reg.effects = { matchNames: [], byMatchName: {}, known: false }; reg.host = { known: false }; }
+    return reg;
+  } catch { return null; }
 }
 
 /** Does the registry say this effect (AE match name) is installed? Unknown = optimistic false for fallbacks. */

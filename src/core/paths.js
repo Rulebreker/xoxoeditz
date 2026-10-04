@@ -42,6 +42,8 @@ export function projectPaths(config, name) {
     versions: path.join(root, 'versions'),
     qa: path.join(root, 'QA_REPORT.json'),
     buildReport: path.join(root, 'build-report.json'),
+    compiled: path.join(root, 'compiled-plan.json'),
+    lastRender: path.join(root, 'last-render.json'),
     renders: path.join(root, 'renders'),
     logs: path.join(root, 'logs'),
     generated: path.join(root, 'generated'),

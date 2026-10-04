@@ -9,7 +9,7 @@ import { autoSfxCues, pickSfxAsset } from '../audio/sound.js';
 import { synthesizeSfx, SYNTH } from '../audio/synth.js';
 import { writeJson, ensureDir } from '../core/paths.js';
 import { nullLogger } from '../core/logger.js';
-import { fail, ok } from '../core/result.js';
+import { fail } from '../core/result.js';
 
 /** Ask After Effects what it actually has (effects, fonts) and merge into the capability registry. */
 export async function refreshHostCapabilities(bridge, caps, config, logger = nullLogger) {
@@ -19,9 +19,10 @@ export async function refreshHostCapabilities(bridge, caps, config, logger = nul
   const fonts = await bridge.call('list_fonts');
   if (fonts.success) info.fonts = fonts.data.fonts; else logger.info('list_fonts unavailable', { error: fonts.error });
   const ping = await bridge.call('ping');
-  if (ping.success) info.host = ping.data;
+  if (ping.success) info.host = { ...ping.data, transport: bridge.transportName };
   const merged = mergeHostInfo(caps, info);
-  if (config) { try { saveRegistry(config, merged); } catch { /* */ } }
+  // never persist what the simulator reported: it would masquerade as the real application's capabilities
+  if (config && bridge.transportName !== 'mock') { try { saveRegistry(config, merged); } catch { /* */ } }
   return { caps: merged, problems: [fx, fonts].filter((r) => !r.success).map((r) => `${r.operation}: ${r.error}`) };
 }
 
@@ -78,6 +79,6 @@ export async function buildProject({ config, bridge, caps, plan: rawPlan, manife
   };
   ensureDir(paths.root);
   writeJson(paths.buildReport, full);
-  writeJson(path.join(paths.root, 'compiled-plan.json'), { plan, meta: build.meta });
+  writeJson(paths.compiled, { plan, meta: build.meta });
   return { success: report.success, operation: 'edit', data: full, ...(report.success ? {} : { error: `${report.errors.length} required step(s) failed: ${report.errors.slice(0, 3).map((e) => `${e.label}: ${e.message}`).join(' | ')}`, recoverable: true }), _build: build, _plan: plan, _caps: hostCaps.caps, _manifest: sfx.manifest };
 }

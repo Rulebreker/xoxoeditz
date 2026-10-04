@@ -183,3 +183,19 @@ test('detect works on this machine and reports honestly', async () => {
   assert.equal(c.node, true);
   assert.ok(c.os.platform);
 });
+
+test('a dry-run never pollutes real state: reports stay in dryrun/, registry keeps no simulator facts', { skip: !hasFfmpeg }, async () => {
+  const { ctx } = await project();
+  const r = await editProject(ctx, 'j20', { dryRun: true });
+  assert.equal(r.success, true, r.error);
+  const root = path.join(ctx.config.projectsDir, 'j20');
+  assert.ok(fs.existsSync(path.join(root, 'dryrun', 'QA_REPORT.json')));
+  assert.equal(fs.existsSync(path.join(root, 'QA_REPORT.json')), false, 'real QA report untouched');
+  assert.equal(fs.existsSync(path.join(root, 'build-report.json')), false);
+  const st = (await statusProject(ctx, 'j20')).data;
+  assert.equal(st.steps.build, 'not built');
+  assert.match(st.steps['dry-run'], /nothing was built in After Effects/);
+  assert.match(st.next, /xoxo edit/);
+  const reg = readJson(ctx.config.capabilitiesFile, null);
+  assert.ok(!reg || reg.effects.known === false, 'simulator effect list was not persisted');
+});

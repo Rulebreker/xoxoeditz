@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "xoxoeditz": {
+      "command": "node",
+      "args": ["bin/xoxo.js", "mcp"]
+    }
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "title": "CHENGDU J-20",
+  "brief": "A serious, cinematic military documentary about the J-20 fighter jet.",
+  "style": "military-documentary",
+  "output": { "resolution": "4k", "aspect": "16:9", "fps": 24, "format": "mp4", "codec": "h264" },
+  "look": { "grain": true, "vignette": 35, "grade": 20 },
+  "endFade": 1.0,
+  "scenes": [
+    {
+      "id": "S01", "start": 0, "end": 4.2,
+      "intent": { "visual": "Slow push-in on the aircraft head-on", "text": "Title card", "sfx": "low impact on title", "music": "bed fades in" },
+      "clips": [{ "asset": "IMG_J20_FRONT", "start": 0, "end": 4.2, "motion": "push_in" }],
+      "graphics": [{ "kind": "title", "text": "CHENGDU J-20", "subtitle": "China's fifth-generation stealth fighter", "start": 0.6, "end": 4 }]
+    },
+    {
+      "id": "S02", "start": 4.2, "end": 8.7,
+      "intent": { "visual": "Cockpit, then runway b-roll", "text": "Speed stat + callout" },
+      "transition": { "type": "slide", "duration": 0.6 },
+      "clips": [
+        { "asset": "IMG_J20_COCKPIT", "start": 0, "end": 2.2, "motion": "pan_left" },
+        { "asset": "VID_BROLL_RUNWAY", "start": 2.2, "end": 4.5, "motion": "static" }
+      ],
+      "graphics": [
+        { "kind": "stat", "label": "Top speed", "prefix": "Mach ", "value": 2.0, "decimals": 1, "position": "lower-left", "start": 0.4, "end": 3.8 },
+        { "kind": "callout", "text": "Radar-absorbent canopy", "position": "upper-right", "target": { "x": 0.5, "y": 0.45 }, "start": 0.8, "end": 2.1 }
+      ]
+    }
+  ],
+  "audio": {
+    "narration": { "asset": "NARR_NARRATION" },
+    "music": [{ "asset": "MUSIC_MAIN", "gainDb": -20, "duckDb": -10, "fadeIn": 2, "fadeOut": 3 }],
+    "sfx": [{ "asset": "SFX_WHOOSH_01", "at": 4.0, "gainDb": -9 }],
+    "autoSfx": true
+  },
+  "captions": { "enabled": false }
+}

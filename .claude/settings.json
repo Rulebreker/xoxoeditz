@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node bin/xoxo.js:*)",
+      "Bash(npm test)",
+      "Bash(npm run lint:jsx)",
+      "Bash(npm run doctor)",
+      "Bash(ffprobe:*)"
+    ],
+    "deny": [
+      "Read(./xoxo.config.json)",
+      "Read(./.env)",
+      "Read(./.env.*)"
+    ]
+  },
+  "enableAllProjectMcpServers": true
+}
