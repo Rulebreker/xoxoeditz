@@ -4,6 +4,7 @@ import { typeOf, inferAudioRole, assetIdPrefix, keywordsFor } from './classify.j
 import { probeFile } from './probe.js';
 import { ident, isInside, readJson, writeJson, ensureDir } from '../core/paths.js';
 import { runTool } from '../core/resolve-tool.js';
+import { fingerprintFile } from './fingerprint.js';
 
 const SKIP_DIRS = new Set(['node_modules', '.git', '.xoxo', '__MACOSX', '$RECYCLE.BIN', 'System Volume Information']);
 
@@ -64,6 +65,7 @@ export async function scanAssets(config, dir, { previous = null, probe = true } 
       id: old?.id, relPath: rel, path: file, ext, type, sizeBytes: st.size, mtimeMs: Math.round(st.mtimeMs),
       keywords: keywordsFor(rel), description: old?.description || '', override: old?.override || {},
     };
+    if (['video', 'image', 'audio'].includes(type)) { try { a.fingerprint = (old && old.sizeBytes === st.size && old.mtimeMs === Math.round(st.mtimeMs) && old.fingerprint) || fingerprintFile(file); } catch { /* unreadable: no fingerprint */ } }
     const sc = sidecar(file);
     if (sc) { a.description ||= sc.description; a.keywords = [...new Set([...a.keywords, ...sc.tags.map((t) => String(t).toLowerCase())])]; }
     if (probe && ['video', 'image', 'audio'].includes(type)) a.meta = await probeFile(file, type, config);

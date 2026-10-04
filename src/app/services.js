@@ -26,6 +26,8 @@ import { renderProject } from '../render/index.js';
 import { describeCapabilities } from '../effects/registry.js';
 import { isAeRunning } from '../detect/tools.js';
 import { readInstallManifest, uninstallAll } from '../core/install-manifest.js';
+import { initLibrary, refreshLibrary } from '../library/scan.js';
+import { generateStarterSfx } from '../library/starter.js';
 import { resolveTool, TOOL_SPECS, normalizeToolPath, describeTried } from '../core/resolve-tool.js';
 
 export function createContext({ cwd, env = process.env, overrides = {}, echo = false, mockAE = null } = {}) {
@@ -148,6 +150,33 @@ export async function doctor(ctx, { connect = false } = {}) {
   const failed = checks.filter((c) => c.status === 'fail');
   return { success: failed.length === 0, operation: 'doctor', data: { checks, ready: failed.length === 0 }, ...(failed.length ? { error: `${failed.length} blocking problem(s): ${failed.map((c) => c.name).join(', ')}`, recoverable: true } : {}) };
 }
+
+// ---------------- universal library & project folders ----------------
+export const libraryInit = (ctx, dir = null) => attempt('library_init', () => {
+  const root = path.resolve(dir || ctx.config.libraryRoot || path.join(ctx.config.root, 'XOXOEDITZ_ASSETS'));
+  const made = initLibrary(root);
+  return { root, created: made.length, next: [`Put sounds/music/overlays in ${root} (see its README.md)`, `Point XOXO at it: set XOXOEDITZ_ASSETS=${root}  or  "libraryRoot" in xoxo.config.json`, 'Then: xoxo library scan   (or `xoxo library starter` for a generated basic SFX pack)'] };
+});
+
+export const libraryScan = (ctx, opts = {}) => attempt('library_scan', async () => {
+  if (!ctx.config.libraryRoot) throw new Error('no library configured: run `xoxo library init <dir>` or set XOXOEDITZ_ASSETS');
+  const m = await refreshLibrary(ctx.config, { alsoInLibrary: opts.alsoInLibrary });
+  return { root: m.root, manifest: ctx.config.libraryManifest, counts: m.counts, warnings: m.warnings };
+});
+
+export const libraryStarter = (ctx, opts = {}) => attempt('library_starter', async () => {
+  const root = path.resolve(opts.dir || ctx.config.libraryRoot || path.join(ctx.config.root, 'XOXOEDITZ_ASSETS'));
+  initLibrary(root);
+  const files = await generateStarterSfx(ctx.config, root);
+  return { root, generated: files.length, note: 'Basic procedurally generated SFX (license-free). Replace/extend with a real library for premium results.' };
+});
+
+/** PROJECT/{INPUT,AUDIO,OUTPUT,CACHE,REPORTS} anywhere the user likes. Sources are only ever read. */
+export const projectInit = (ctx, dir) => attempt('project_init', () => {
+  const root = path.resolve(dir);
+  const made = ['INPUT', 'AUDIO', 'OUTPUT', 'CACHE', 'REPORTS'].map((d) => { const p = path.join(root, d); const had = fs.existsSync(p); ensureDir(p); return { dir: p, created: !had }; });
+  return { root, folders: made };
+});
 
 // ---------------- config ----------------
 const SETTABLE = ['ffmpeg', 'ffprobe', 'whisper', 'aePath', 'aerenderPath', 'mediaEncoderPath', 'transport', 'bridgeDir'];

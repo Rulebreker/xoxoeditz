@@ -20,6 +20,7 @@ export const DEFAULTS = {
   whisper: null,
   allowRawEval: false, // lets Claude run arbitrary ExtendScript. Off by default.
   allowInstall: false, // unattended plugin/software install. Off by default; see docs.
+  libraryRoot: null, // universal asset library (XOXOEDITZ_ASSETS); env XOXOEDITZ_ASSETS / XOXO_LIBRARY
   extraAdobeRoots: [],
   logLevel: 'info',
   timeouts: { callMs: 120000, coldStartMs: 300000, renderMs: 6 * 3600 * 1000 },
@@ -35,6 +36,7 @@ export function loadConfig({ cwd = REPO_ROOT, env = process.env, overrides = {} 
   if (env.XOXO_AE_PATH) cfg.aePath = env.XOXO_AE_PATH;
   if (env.XOXO_AERENDER_PATH) cfg.aerenderPath = env.XOXO_AERENDER_PATH;
   // XOXO_FFMPEG / XOXO_FFPROBE / XOXO_WHISPER are read by the tool resolver, below the explicit config value.
+  if (env.XOXO_LIBRARY || env.XOXOEDITZ_ASSETS) cfg.libraryRoot = env.XOXO_LIBRARY || env.XOXOEDITZ_ASSETS;
   if (env.XOXO_TRANSPORT) cfg.transport = env.XOXO_TRANSPORT;
   if (env.XOXO_BRIDGE_DIR) cfg.bridgeDir = env.XOXO_BRIDGE_DIR;
   if (env.XOXO_WORKSPACE) cfg.workspace = env.XOXO_WORKSPACE;
@@ -49,6 +51,12 @@ export function loadConfig({ cwd = REPO_ROOT, env = process.env, overrides = {} 
   cfg.assetsDir = abs(cfg.assetsDir);
   cfg.bridgeDir = cfg.bridgeDir ? abs(cfg.bridgeDir) : path.join(cfg.workspace, 'bridge');
   cfg.logDir = path.join(cfg.workspace, 'logs');
+  // library: explicit setting, else ./XOXOEDITZ_ASSETS next to the repo when it exists
+  if (!cfg.libraryRoot && fs.existsSync(path.join(cwd, 'XOXOEDITZ_ASSETS'))) cfg.libraryRoot = 'XOXOEDITZ_ASSETS';
+  cfg.libraryRoot = cfg.libraryRoot ? abs(cfg.libraryRoot) : null;
+  cfg.libraryDir = path.join(cfg.workspace, 'library');
+  cfg.libraryManifest = path.join(cfg.libraryDir, 'universal-assets.manifest.json');
+  cfg.memoryFile = path.join(cfg.workspace, 'memory.json');
   cfg.capabilitiesFile = path.join(cfg.workspace, 'capabilities.json');
   cfg.tools = resolveAllTools(cfg, env); // { ffmpeg, ffprobe, whisper } -> { ok, path, source, tried, ... }
   return cfg;

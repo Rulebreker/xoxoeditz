@@ -31,6 +31,8 @@ ${bold('Setup & tools')}
   xoxo setup [--startup]             install bridge scripts, run doctor
   xoxo detect                        rebuild the capability registry (.xoxo/capabilities.json)
   xoxo effects                       effect fallback chains for this machine
+  xoxo library init [dir] | scan | starter [dir]   universal asset library (SFX, music, overlays, ...)
+  xoxo project init <dir>            create INPUT/AUDIO/OUTPUT/CACHE/REPORTS anywhere
   xoxo bridge install|ping|stop|ops|installed|uninstall|call <op> [json]
   xoxo sfx <whoosh|impact|riser|tick> [--out file]
   xoxo selftest [--dry-run]          end-to-end smoke test with generated media
@@ -44,7 +46,7 @@ const OPTIONS = {
   json: { type: 'boolean' }, help: { type: 'boolean', short: 'h' }, 'dry-run': { type: 'boolean' }, connect: { type: 'boolean' }, startup: { type: 'boolean' },
   assets: { type: 'string' }, dir: { type: 'string' }, thumbs: { type: 'boolean' }, 'no-probe': { type: 'boolean' },
   audio: { type: 'string' }, script: { type: 'string' }, subtitles: { type: 'string' }, transcribe: { type: 'boolean' }, 'noise-db': { type: 'string' },
-  scaffold: { type: 'boolean' }, validate: { type: 'boolean' }, show: { type: 'boolean' }, force: { type: 'boolean' },
+  scaffold: { type: 'boolean' }, validate: { type: 'boolean' }, show: { type: 'boolean' }, force: { type: 'boolean' }, 'also-in-library': { type: 'boolean' },
   title: { type: 'string' }, brief: { type: 'string' }, style: { type: 'string' }, resolution: { type: 'string' }, aspect: { type: 'string' }, fps: { type: 'string' }, 'no-captions': { type: 'boolean' }, captions: { type: 'boolean' },
   'no-verify': { type: 'boolean' }, 'no-repair': { type: 'boolean' }, 'no-render': { type: 'boolean' },
   preview: { type: 'boolean' }, range: { type: 'string' }, ame: { type: 'boolean' }, 'keep-intermediate': { type: 'boolean' },
@@ -125,6 +127,17 @@ export async function main(argv) {
         const r = await runShowcase(ctx, name, { assets: o.assets, title: o.title, brief: o.brief, style: o.style, target: o.target ? Number(o.target) : undefined, resolution: o.resolution, aspect: o.aspect, fps: o.fps ? Number(o.fps) : undefined, script: o.script, subtitles: o.subtitles, captions: o['no-captions'] ? false : (o.captions ? true : undefined), onStep: o.json ? undefined : (s) => { if (s.status === 'start') process.stderr.write(dim(`  → ${s.label}\n`)); else console.log(`${s.ok ? green('✓') : red('✗')} ${s.label}${s.detail ? dim('  ' + s.detail) : ''}${s.error ? red('  ' + s.error) : ''}  ${dim((s.ms / 1000).toFixed(1) + 's')}`); }, onProgress: undefined });
         if (o.json) console.log(JSON.stringify(r, null, 2)); else console.log(`\n${r.success ? green('DONE') : red('FAILED')}  report: ${r.data.report}${r.success ? `\n      video:  ${r.data.output}` : '\n      ' + red(r.error)}`);
         return r.success ? 0 : 1;
+      }
+      case 'library': {
+        const sub = name;
+        if (sub === 'init') return emit(o, await S.libraryInit(ctx, pos[1]), (d) => `${green('✓')} library at ${d.root} (${d.created} folders created)\n${d.next.map((n) => '  • ' + n).join('\n')}`);
+        if (sub === 'scan') return emit(o, await S.libraryScan(ctx, { alsoInLibrary: o['also-in-library'] }), (d) => `${green('✓')} ${Object.entries(d.counts).map(([k, v]) => `${v} ${k}`).join(', ') || 'empty'}  -> ${d.manifest}\n${d.warnings.map((w) => '  ' + red('!') + ' ' + w).join('\n')}`);
+        if (sub === 'starter') return emit(o, await S.libraryStarter(ctx, { dir: pos[1] }), (d) => `${green('✓')} ${d.generated} SFX generated in ${d.root}\n  ${dim(d.note)}`);
+        console.error('usage: xoxo library init [dir] | scan | starter [dir]'); return 2;
+      }
+      case 'project': {
+        if (name === 'init' && pos[1]) return emit(o, await S.projectInit(ctx, pos[1]), (d) => `${green('✓')} ${d.root}\n${d.folders.map((f) => `  ${f.created ? '+' : '='} ${f.dir}`).join('\n')}`);
+        console.error('usage: xoxo project init <dir>'); return 2;
       }
       case 'auto': return await auto(ctx, o, pos);
       case 'selftest': return await selftest(ctx, o);

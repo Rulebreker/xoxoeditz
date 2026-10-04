@@ -19,7 +19,7 @@ export function isAllowedExecutable(cmd) {
 /**
  * Run an allowlisted executable. Never throws: resolves {code, stdout, stderr, error?, timedOut?}.
  */
-export function run(cmd, args = [], { timeoutMs = 30000, cwd, input, maxBuffer = 64 * 1024 * 1024, trusted = false } = {}) {
+export function run(cmd, args = [], { timeoutMs = 30000, cwd, input, maxBuffer = 64 * 1024 * 1024, trusted = false, binary = false } = {}) {
   return new Promise((resolve) => {
     // `trusted` = the path was validated by src/core/resolve-tool.js (an existing executable the USER configured,
     // so its file name may legitimately be e.g. ffmpeg-8.0.exe). Untrusted callers still hit the name allowlist.
@@ -35,12 +35,13 @@ export function run(cmd, args = [], { timeoutMs = 30000, cwd, input, maxBuffer =
       return;
     }
     let stdout = ''; let stderr = ''; let timedOut = false; let done = false;
+    const chunks = []; let size = 0; // binary mode: raw PCM / frames must not be decoded as text
     const finish = (r) => { if (!done) { done = true; clearTimeout(timer); resolve(r); } };
     const timer = setTimeout(() => { timedOut = true; try { child.kill('SIGKILL'); } catch { /* */ } }, timeoutMs);
-    child.stdout.on('data', (d) => { if (stdout.length < maxBuffer) stdout += d; });
+    child.stdout.on('data', (d) => { if (binary) { if (size < maxBuffer) { chunks.push(d); size += d.length; } } else if (stdout.length < maxBuffer) stdout += d; });
     child.stderr.on('data', (d) => { if (stderr.length < maxBuffer) stderr += d; });
     child.on('error', (e) => finish({ code: -1, stdout, stderr, error: e.code === 'ENOENT' ? `not found: ${cmd}` : e.message }));
-    child.on('close', (code) => finish({ code: code ?? -1, stdout, stderr, timedOut }));
+    child.on('close', (code) => finish({ code: code ?? -1, stdout: binary ? Buffer.concat(chunks) : stdout, stderr, timedOut }));
     if (input) child.stdin.end(input); else child.stdin.end();
   });
 }
