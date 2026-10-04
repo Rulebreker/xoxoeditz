@@ -47,6 +47,8 @@ XOXO.describeLayerFull = function (comp, l, withBounds) {
     for (var i = 1; i <= parade.numProperties; i++) fx.push(parade.property(i).name);
   } catch (e6) { }
   d.effects = fx;
+  try { if (l.timeRemapEnabled) d.timeRemapKeys = l.property("ADBE Time Remapping").numKeys; } catch (e12) { }
+  try { d.motionBlur = !!l.motionBlur; } catch (e13) { }
   if (d.kind === "text") {
     try { d.text = l.property("ADBE Text Properties").property("ADBE Text Document").value.text; } catch (e7) { }
     try { d.fontSize = l.property("ADBE Text Properties").property("ADBE Text Document").value.fontSize; } catch (e8) { }

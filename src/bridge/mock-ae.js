@@ -289,7 +289,6 @@ function makeLayer(comp, Cls, { name, source = null, kind, duration, hasAudio = 
   l._start = 0; l._in = 0; l._out = duration ?? comp.duration; l._stretch = 100; l._parent = null;
   l.threeDLayer = false; l.motionBlur = false; l.adjustmentLayer = false; l.nullLayer = kind === 'null'; l.blendingMode = BlendingMode.NORMAL;
   l.hasAudio = hasAudio; l.audioEnabled = hasAudio; l.trackMatteType = 0; l._kind = kind;
-  l.timeRemapEnabled = false;
   const root = new MockProp('ROOT', { name: 'root', group: true });
   const add = (mn) => { const n = buildNode(mn); n.parentProp = root; n.propertyIndex = root.children.length + 1; root.children.push(n); return n; };
   if (kind === 'camera') {
@@ -370,6 +369,21 @@ class LayerCollection {
         }
       },
     });
+    // Time Remap exists only once enabled, and never for stills/solids (as in After Effects)
+    let tre = false;
+    Object.defineProperty(l, 'timeRemapEnabled', {
+      get: () => tre,
+      set: (v) => {
+        if (v && !tre) {
+          const src = l.source;
+          if (!src || src.mainSource?.isStill || !(src.duration > 0) || src instanceof SolidSource || src.mainSource instanceof SolidSource) throw new Error('Time remapping is not available for this layer');
+          const p = buildNode('ADBE Time Remapping'); p.parentProp = l._root; p.propertyIndex = l._root.children.length + 1; l._root.children.push(p);
+          p.setValueAtTime(0, 0); p.setValueAtTime(src.duration, src.duration);
+        }
+        tre = Boolean(v);
+      },
+    });
+    l.frameBlendingType = 4012;
     this.comp._layers.unshift(l);
     return l;
   }
@@ -520,7 +534,7 @@ export function createMockAE({ effects = DEFAULT_EFFECTS, version = '25.0x57', p
     ImportOptions, ImportAsType: { FOOTAGE: 1, COMP: 2 }, CloseOptions: { DO_NOT_SAVE_CHANGES: 1 },
     CompItem, FootageItem, FolderItem, AVLayer, TextLayer, ShapeLayer, CameraLayer, LightLayer, SolidSource,
     BlendingMode, TrackMatteType, ParagraphJustification: { LEFT_JUSTIFY: 7414, CENTER_JUSTIFY: 7413, RIGHT_JUSTIFY: 7415 },
-    KeyframeEase, KeyframeInterpolationType, MarkerValue, Shape,
+    KeyframeEase, KeyframeInterpolationType, MarkerValue, Shape, FrameBlendingType: { NO_FRAME_BLEND: 4012, FRAME_MIX: 4013, PIXEL_MOTION: 4014 },
   };
   sandbox.File.prototype = MockFile.prototype; sandbox.Folder.prototype = MockFolder.prototype;
   const context = vm.createContext(sandbox);

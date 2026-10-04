@@ -108,3 +108,26 @@ XOXO.op("text_reveal", function (a) {
   st.setValueAtTime(a.start + a.duration, 100);
   return { warnings: warnings };
 });
+
+// Variable speed: comp time -> source time keyframes on Time Remap. Linear keys sampled densely by the caller
+// reproduce any speed curve, so no bezier handles are needed.
+XOXO.op("time_remap", function (a) {
+  XOXO.need(a, ["comp", "layer", "keys"]);
+  var comp = XOXO.getComp(a.comp);
+  var layer = XOXO.getLayer(comp, a.layer);
+  var warnings = [];
+  try { layer.timeRemapEnabled = true; } catch (e) { throw XOXO.err("time remapping is not available for layer " + layer.name + ": " + e.message, "UNSUPPORTED", true); }
+  var p = layer.property("ADBE Time Remapping");
+  if (!p) throw XOXO.err("Time Remap property missing on " + layer.name + " (stills and solids cannot be remapped)", "UNSUPPORTED", true);
+  XOXO.clearKeys(p); // After Effects adds two default keys when remapping is enabled
+  for (var i = 0; i < a.keys.length; i++) p.setValueAtTime(a.keys[i].t, a.keys[i].src);
+  if (a.start !== undefined) layer.inPoint = a.start;
+  if (a.end !== undefined) layer.outPoint = a.end;
+  if (a.frameBlend) {
+    try {
+      layer.frameBlendingType = (a.frameBlend === "pixel") ? FrameBlendingType.PIXEL_MOTION : ((a.frameBlend === "mix") ? FrameBlendingType.FRAME_MIX : FrameBlendingType.NO_FRAME_BLEND);
+    } catch (e2) { warnings.push("frame blending not applied: " + e2.message); }
+  }
+  if (a.motionBlur) { try { layer.motionBlur = true; } catch (e3) { warnings.push("motion blur not applied: " + e3.message); } }
+  return { numKeys: p.numKeys, warnings: warnings };
+});

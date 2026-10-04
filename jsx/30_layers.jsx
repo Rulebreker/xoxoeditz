@@ -279,6 +279,22 @@ XOXO.op("layers_remove", function (a) {
   return { removed: removed };
 });
 
+// Z-order: names are listed bottom -> top; each is moved to the front in turn, so the last name ends on top.
+XOXO.op("layers_reorder", function (a) {
+  XOXO.need(a, ["comp", "order"]);
+  var comp = XOXO.getComp(a.comp);
+  var missing = [];
+  var moved = 0;
+  for (var i = 0; i < a.order.length; i++) {
+    var found = null;
+    for (var k = 1; k <= comp.numLayers; k++) { if (comp.layer(k).name === a.order[i]) { found = comp.layer(k); break; } }
+    if (!found) { missing.push(a.order[i]); continue; }
+    found.moveToBeginning();
+    moved++;
+  }
+  return { moved: moved, missing: missing };
+});
+
 XOXO.op("track_matte", function (a) {
   XOXO.need(a, ["comp", "layer", "matte", "type"]);
   var comp = XOXO.getComp(a.comp);
