@@ -95,6 +95,7 @@ export function planText(items, opts) {
   const sorted = items.map((it, i) => ({ ...it, _i: i })).sort((a, b) => a.at - b.at || a._i - b._i);
   for (const it of sorted) {
     const k = TEXT_KINDS[it.kind]; if (!k) { dropped.push({ item: it, reason: `unknown text kind "${it.kind}"` }); continue; }
+    if (!String(it.text ?? '').trim()) { dropped.push({ item: it, reason: 'empty text' }); continue; }
     const holdRange = k.hold; const dur = it.dur ?? clamp(holdRange[0] + (holdRange[1] - holdRange[0]) * (1 - intensity), holdRange[0], holdRange[1]);
     const at = snapT(snap(it.at), fps);
     // animation: the edit type's preference, restricted to what suits this kind, avoiding the last two used
@@ -102,7 +103,7 @@ export function planText(items, opts) {
     const pool = (allowed.length ? allowed : k.anims.filter((a) => ['fade', 'slide', 'scale_punch'].includes(a)));
     const fresh = pool.filter((a) => !history.slice(-2).includes(a));
     let anim = it.animation && TEXT_ANIM_OK(it.animation) ? it.animation : rng.pick(fresh.length ? fresh : pool);
-    if (anim === 'kinetic' && String(it.text).split(/\s+/).length < 2) anim = pool.find((a) => a !== 'kinetic') || 'scale_punch';
+    if (anim === 'kinetic' && String(it.text).split(/\s+/).length < 2) { const alt = pool.filter((a) => a !== 'kinetic' && !history.slice(-2).includes(a)); anim = alt.length ? rng.pick(alt) : (pool.find((a) => a !== 'kinetic') || 'scale_punch'); }
     // placement with collision avoidance against everything alive at the same time
     const alive = placed.filter((p) => p.at < at + dur && p.at + p.dur > at);
     if (alive.length >= maxSimultaneous) { dropped.push({ item: it, reason: `already ${alive.length} texts on screen` }); continue; }

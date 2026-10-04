@@ -35,7 +35,7 @@ export const EDIT_TYPES = Object.fromEntries([
     dials: { intensity: 0.8, cutFrequency: 0.85, velocity: 0.9, speedVariation: 0.8, camera: 0.75, motionBlur: 0.8, effects: 0.55, sfx: 0.8, transitions: 0.75, text: 0.5, color: 0.6, impact: 0.8, beatSync: 0.9, depth: 0.2, music: 0.8 },
     pacing: { shotSeconds: [0.6, 2.4], phrasing: 'bars', targetSeconds: 30 }, velocity: { profile: 'VELOCITY_HARD' }, camera: { rig: 'CAMERA_VELOCITY' },
     transitions: { palette: [{ type: 'whip', w: 3 }, { type: 'zoom', w: 2 }, { type: 'flash', w: 1.5 }, { type: 'motion_blur', w: 1 }, { type: 'glitch', w: 0.5 }, { type: 'cut', w: 2 }], durationBeats: 0.5, hardCutShare: 0.45 },
-    typography: { style: 'rhythmic', animations: ['scale_punch', 'glitch_reveal', 'word_reveal', 'slide'], titleCase: 'upper' },
+    typography: { style: 'rhythmic', animations: ['scale_punch', 'kinetic', 'glitch_reveal', 'word_reveal', 'slide'], titleCase: 'upper' },
     sfx: { prefer: { transition: ['WHOOSH', 'TRANSITION'], impact: ['IMPACT', 'HIT', 'BOOM'], riser: ['RISER', 'REVERSE'], text: ['UI', 'GLITCH'], ambience: [] }, layering: 2 },
     music: { genres: ['ACTION', 'TECHNO', 'PHONK'], bpmRange: [100, 175] }, color: 'CINEMATIC', look: { grain: 0.35, vignette: 0.4, glow: 0.35 },
     shots: { FULL_BLEED: 1, CROP_DETAIL: 0.7, '2_5D': 0.2, PARALLAX: 0.1, CAMERA: 0.6, SPLIT_SCREEN: 0.2, PIP: 0.12, FREEZE_FRAME: 0.5, IMPACT_SCENE: 0.7, TEXT_SCENE: 0.3, DARK_TITLE: 0.3, END_CARD: 0.4 },

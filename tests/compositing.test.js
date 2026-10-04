@@ -69,6 +69,7 @@ test('templates: 16 exist, 15 are implemented, MAP_SCENE refuses honestly, input
   assert.throws(() => planShot('CROP_DETAIL', shot, { comp: COMP, asset: mkAsset('a', 3840, 2160, { ...SUBJ, conf: 0.05 }) }), /reliably detected subject/);
   assert.throws(() => planShot('TEXT_SCENE', shot, { comp: COMP }), /needs text/);
   assert.throws(() => planShot('STAT_SCENE', shot, { comp: COMP }), /needs a stat/);
+  assert.throws(() => planShot('CALLOUT', shot, { comp: COMP, asset: mkAsset('a') }), /needs callout text/);
   assert.throws(() => planShot('IMPACT_SCENE', { ...shot, dur: 0.4 }, { comp: COMP, asset: mkAsset('a') }), /at least 0.6s/);
 });
 
@@ -134,7 +135,7 @@ test('every template runs on the host (simulator): ops are accepted, re-running 
     const a = { ...mkAsset(aName, sizes[`${aName}.mp4`].w, sizes[`${aName}.mp4`].h), item: aName }; const b = { ...mkAsset('B', 1920, 1080, { x: 0.3, y: 0.3, w: 0.3, h: 0.4, conf: 0.6 }), item: 'B' };
     for (const name of TEMPLATE_NAMES.filter((n) => TEMPLATES[n].implemented)) {
       const shot = { id: `${name.replace(/\W/g, '')}`, start: 4, dur: 3, index: 1, hasNext: true, impacts: [0.6], intensity: 0.8 };
-      const ctx = { comp: COMP, fps: 24, caps: capsObj, seed: 3, rig: new CameraPlanner({ rig: 'CAMERA_VELOCITY', seed: name }), asset: a, asset2: b, title: 'SPEED', stat: { value: '300', label: 'KM/H' }, accent: '#ffcc00' };
+      const ctx = { comp: COMP, fps: 24, caps: capsObj, seed: 3, rig: new CameraPlanner({ rig: 'CAMERA_VELOCITY', seed: name }), asset: a, asset2: b, title: 'SPEED', stat: { value: '300', label: 'KM/H' }, callout: 'CARBON BRAKES', accent: '#ffcc00' };
       const plan = planShot(name, shot, ctx);
       const out = stackOps(plan, { ...ctx, shot });
       for (const [op, args] of out.ops) must(op, args);

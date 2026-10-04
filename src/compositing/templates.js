@@ -87,9 +87,9 @@ export const TEMPLATES = {
     plan: (shot, ctx) => ({ layers: [solid(`${shot.id}_BG`, ctx.bg || '#0a0c10'), ...(ctx.asset ? [footage(`${shot.id}_GHOST`, ctx.asset, { opacity: 30, blur: 18, speed: 'normal', motion: [{ type: 'PUSH', amount: 0.06 }], maxLift: 1.2 })] : [])],
       textSlots: [{ kind: 'STAT', text: String(ctx.stat.value), at: 0.1, dur: Math.max(0.6, shot.dur - 0.2) }, ...(ctx.stat.label ? [{ kind: 'LABEL', text: ctx.stat.label, at: 0.35, dur: Math.max(0.5, shot.dur - 0.5), anchor: [0.5, 0.64] }] : [])] }) },
 
-  CALLOUT: { implemented: true, assets: 1, needsSubject: true, doc: 'Footage with a label and leader line pointing at the subject.',
+  CALLOUT: { implemented: true, assets: 1, needsSubject: true, needsCallout: true, doc: 'Footage with a label and leader line pointing at the subject.',
     plan: (shot, ctx) => { const cam = camera(ctx, { ...shot, intensity: Math.min(0.5, shot.intensity ?? 0.5) }); const s = ctx.asset.subject; const target = ctx.target || { x: s.x + s.w / 2, y: s.y + s.h / 2 };
-      return { layers: [footage(`${shot.id}_MAIN`, ctx.asset, { motion: cam?.specs || [], maxLift: cam?.maxLift })], camera: cam, textSlots: [{ kind: 'CALLOUT', text: ctx.callout || ctx.text || 'DETAIL', at: Math.min(0.5, shot.dur * 0.25), dur: Math.max(0.6, shot.dur * 0.6), target }] }; } },
+      return { layers: [footage(`${shot.id}_MAIN`, ctx.asset, { motion: cam?.specs || [], maxLift: cam?.maxLift })], camera: cam, textSlots: [{ kind: 'CALLOUT', text: ctx.callout, at: Math.min(0.5, shot.dur * 0.25), dur: Math.max(0.6, shot.dur * 0.6), target }] }; } },
 
   HUD_SCENE: { implemented: true, assets: 1, doc: 'Footage under a thin HUD frame with technical readouts.',
     plan: (shot, ctx) => { const cam = camera(ctx, { ...shot, intensity: Math.min(0.5, shot.intensity ?? 0.5) });
@@ -99,10 +99,10 @@ export const TEMPLATES = {
   MAP_SCENE: { implemented: false, assets: 0, doc: 'TODO: needs map data / a reliable geo asset pipeline; not implemented, never chosen automatically.',
     plan: () => { throw new Error('MAP_SCENE is not implemented (TODO): it needs map imagery and route data. Choose another template.'); } },
 
-  FREEZE_FRAME: { implemented: true, assets: 1, minDur: 0.6, doc: 'Plays briefly, then holds one frame with a punch-in and a colour pop.',
+  FREEZE_FRAME: { implemented: true, assets: 1, minDur: 0.9, doc: 'Plays briefly, then holds one frame (never longer than 0.7 s) with a punch-in, then carries on.',
     plan: (shot, ctx) => { const at = Math.min(shot.dur * 0.35, 0.5); const rng = makeRng('freeze', ctx.seed, shot.id);
       return { layers: [footage(`${shot.id}_MAIN`, ctx.asset, { motion: [{ type: 'IMPACT', at, amount: 0.07, dir: rng.pick([90, 270]) }, { type: 'PUSH', at, amount: 0.1, curve: 'ease-out-expo' }], maxLift: 1.3 })],
-        velocityHint: { kind: 'freeze', at, hold: shot.dur - at }, overlays: [{ kind: 'flash', at, d: 0.12, peak: 55 }], notes: [`freezes at ${at.toFixed(2)}s into the shot`] }; } },
+        velocityHint: { kind: 'freeze', at, hold: Math.min(0.7, Math.max(2 / 24, shot.dur - at - 0.25)) }, overlays: [{ kind: 'flash', at, d: 0.12, peak: 55 }], notes: [`freezes at ${at.toFixed(2)}s into the shot`] }; } },
 
   IMPACT_SCENE: { implemented: true, assets: 1, minDur: 0.6, doc: 'Build, slow-down, hit: velocity ramp into an impact with shake, flash and a slammed word.',
     plan: (shot, ctx) => { const at = Math.max(0.25, Math.min(shot.dur * 0.55, shot.dur - 0.25)); const rng = makeRng('impact', ctx.seed, shot.id);
@@ -139,6 +139,7 @@ export function planShot(name, shot, ctx) {
   if (t.needsSubject && !reliable(ctx.asset?.subject)) throw new Error(`${name} needs a reliably detected subject (confidence ≥ 0.3); use FULL_BLEED or CAMERA for this asset`);
   if (t.needsText && !(ctx.title || ctx.text)) throw new Error(`${name} needs text (ctx.title or ctx.text)`);
   if (t.needsStat && !ctx.stat?.value) throw new Error(`${name} needs a stat value`);
+  if (t.needsCallout && !ctx.callout) throw new Error(`${name} needs callout text (ctx.callout): an unlabelled callout is just a line`);
   if (t.minDur && shot.dur < t.minDur) throw new Error(`${name} needs at least ${t.minDur}s (shot is ${shot.dur.toFixed(2)}s)`);
   const p = t.plan(shot, ctx);
   return { template: name, ok: true, layers: p.layers, overlays: p.overlays || [], textSlots: p.textSlots || [], velocityHint: p.velocityHint || null, camera: p.camera || null, notes: p.notes || [], fadeOut: p.fadeOut || 0, pipRect: p.pipRect, parallax: p.parallax, fallback: Boolean(p.fallback) };
@@ -159,6 +160,7 @@ export function chooseTemplate(shot, ctx, { history = [], rng = makeRng('templat
     else if (t.needsSubject && !hasSubj) { w = 0; why = 'no reliable subject'; }
     else if (t.needsText && !hasText) { w = 0; why = 'no text for this shot'; }
     else if (t.needsStat && !ctx.stat?.value) { w = 0; why = 'no stat'; }
+    else if (t.needsCallout && !ctx.callout) { w = 0; why = 'no callout text'; }
     else if (t.minDur && shot.dur < t.minDur) { w = 0; why = `shot shorter than ${t.minDur}s`; }
     else if ((name === 'PIP' || name === 'SPLIT_SCREEN') && shot.dur < 1.5) { w = 0; why = 'too short'; }
     else if ((name === '2_5D' || name === 'PARALLAX') && shot.dur < 1.2) { w = 0; why = 'too short for depth to read'; }

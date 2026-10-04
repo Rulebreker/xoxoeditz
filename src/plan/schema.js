@@ -149,4 +149,4 @@ export function normalizePlan(plan, { manifest = null } = {}) {
   return out;
 }
 
-export const masterEnd = (plan) => plan.scenes[plan.scenes.length - 1].end;
+export const masterEnd = (plan) => (plan.mode === 'timeline' ? plan.timeline.duration : plan.scenes[plan.scenes.length - 1].end);
