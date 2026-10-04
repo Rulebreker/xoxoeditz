@@ -15,6 +15,7 @@ node bin/xoxo.js doctor            # or the MCP tool xoxo_doctor
 ```
 It reports After Effects / aerender / FFmpeg / bridge / permissions. Fix every ✗ before editing (the fix text is in
 the output). `xoxo doctor --connect` also launches After Effects and pings it (can take minutes on a cold start).
+FFmpeg/FFprobe are located by one resolver (config → `XOXO_FFMPEG`/`XOXO_FFPROBE` → PATH); doctor prints the path in use. Never call `ffmpeg`/`ffprobe` by bare name in code — use `runTool(config, 'ffmpeg', args)` from `src/core/resolve-tool.js` (a test enforces it).
 No After Effects (Linux/CI)? Everything works with `--dry-run` against the built-in simulator, but **nothing is
 rendered** — say so to the user.
 

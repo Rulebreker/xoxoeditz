@@ -18,6 +18,6 @@ Start with `node bin/xoxo.js doctor --connect`. Logs: `.xoxo/logs/xoxo-<date>.js
 | `PLACEHOLDER_PRESENT` | Asset missing/moved/unsupported | Fix the file, `xoxo assets`, `xoxo edit` |
 | `TEXT_OUT_OF_FRAME` | Long text | Auto-repaired (scale/move); shorten for best results |
 | Render OK but verification fails | Wrong size/duration/black | Read `verification.checks`; run a `--preview --range` and look at the frames |
-| `ffprobe unavailable` | FFmpeg not on PATH | Install, or `XOXO_FFPROBE` |
+| `FFmpeg/FFprobe not found` in `doctor` | Not on PATH and no override seen by this process | Read the "tried" list in the message. `xoxo config set ffmpeg "<full path>"` (persistent) or set `XOXO_FFMPEG` in the *same* terminal that launches `claude`/`node`; `setx` only affects new terminals. Quotes/spaces/slashes are handled; `.cmd` shims are not |
 | Everything fails after an AE crash | Stale listener / lock | `xoxo bridge stop`; restart After Effects; delete `.xoxo/bridge/jobs/*` |
 | Works in `--dry-run`, fails for real | Simulator ≠ real AE | Attach `build-report.json`; check `Likely tweak points` in AE_INTEGRATION.md |

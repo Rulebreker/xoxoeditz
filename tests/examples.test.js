@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { tmpDir } from './helpers/env.js';
+import { tmpDir, baseEnv } from './helpers/env.js';
 import { hasFfmpeg, makeAssetFolder } from './helpers/media.js';
 import { createContext, newProject, scanProject, editProject } from '../src/app/services.js';
 import { validatePlan } from '../src/plan/schema.js';
@@ -24,7 +24,7 @@ test('output spec: resolutions, aspects, explicit sizes', () => {
 test('examples/plan.example.json is valid for the standard test assets and builds', { skip: !hasFfmpeg }, async () => {
   const root = tmpDir('xoxo-ex-');
   const assets = makeAssetFolder(path.join(root, 'assets'));
-  const ctx = createContext({ cwd: root, env: {}, overrides: { transport: 'mock' } });
+  const ctx = createContext({ cwd: root, env: baseEnv(), overrides: { transport: 'mock' } });
   await newProject(ctx, 'ex', { assets });
   const scan = await scanProject(ctx, 'ex');
   assert.equal(scan.success, true);
@@ -60,7 +60,7 @@ test('advanced ops: validated, comp substitution, runs idempotently in the build
   assert.equal(bad.errors.length, 3);
   const root = tmpDir('xoxo-adv-');
   const assets = makeAssetFolder(path.join(root, 'assets'));
-  const ctx = createContext({ cwd: root, env: {}, overrides: { transport: 'mock' } });
+  const ctx = createContext({ cwd: root, env: baseEnv(), overrides: { transport: 'mock' } });
   await newProject(ctx, 'adv', { assets }); await scanProject(ctx, 'adv');
   const plan = JSON.parse(fs.readFileSync(path.resolve('examples/plan.example.json'), 'utf8'));
   plan.scenes[0].advanced = [{ label: '3D camera', ops: [

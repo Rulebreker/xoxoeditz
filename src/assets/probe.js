@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { run } from '../core/exec.js';
+import { runTool } from '../core/resolve-tool.js';
 
 function parseRate(r) {
   if (!r || r === '0/0') return null;
@@ -72,7 +72,7 @@ export function readImageSize(file) {
 }
 
 export async function probeFile(file, type, config) {
-  const r = await run(config.ffprobe, ['-v', 'error', '-protocol_whitelist', 'file', '-print_format', 'json', '-show_format', '-show_streams', file], { timeoutMs: 60000 });
+  const r = await runTool(config, 'ffprobe', ['-v', 'error', '-protocol_whitelist', 'file', '-print_format', 'json', '-show_format', '-show_streams', file], { timeoutMs: 60000 });
   if (!r.error && r.code === 0) {
     try { return { ...parseFfprobe(JSON.parse(r.stdout)), probe: 'ffprobe' }; } catch { /* fall back */ }
   }

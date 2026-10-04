@@ -26,6 +26,7 @@ import { renderProject } from '../render/index.js';
 import { describeCapabilities } from '../effects/registry.js';
 import { isAeRunning } from '../detect/tools.js';
 import { readInstallManifest, uninstallAll } from '../core/install-manifest.js';
+import { resolveTool, TOOL_SPECS, normalizeToolPath, describeTried } from '../core/resolve-tool.js';
 
 export function createContext({ cwd, env = process.env, overrides = {}, echo = false, mockAE = null } = {}) {
   cwd ??= env.XOXO_ROOT || REPO_ROOT; // XOXO_ROOT relocates assets/projects/.xoxo (used by tests and shared installs)
@@ -72,7 +73,13 @@ function loadProject(ctx, name, { dryRun = false } = {}) {
 
 // ---------------- capabilities ----------------
 export async function getCapabilities(ctx, { refresh = false } = {}) {
-  if (!refresh) { const c = loadRegistry(ctx.config); if (c) return c; }
+  if (!refresh) {
+    const c = loadRegistry(ctx.config);
+    // A cached registry is only valid for the tools it was built with: if the resolved ffmpeg/ffprobe/whisper
+    // changed (new env var, new config, tool installed since), rebuild instead of trusting stale answers.
+    const stale = ['ffmpeg', 'ffprobe', 'whisper'].some((n) => (c?.tools?.[n]?.path ?? null) !== (ctx.config.tools[n].path ?? null));
+    if (c && !stale) return c;
+  }
   const reg = await buildCapabilityRegistry(ctx.config);
   saveRegistry(ctx.config, reg);
   return reg;
@@ -105,8 +112,11 @@ export async function doctor(ctx, { connect = false } = {}) {
     add('After Effects', 'fail', 'not found', config.aePath ? `The configured path "${config.aePath}" does not contain After Effects.` : 'Install Adobe After Effects, or set XOXO_AE_PATH (or "aePath" in xoxo.config.json) to AfterFX.exe / the install folder. You can still use `--dry-run` with the built-in simulator.');
   }
   add('Media Encoder', caps.media_encoder ? 'ok' : 'warn', caps.media_encoder_path || 'not found', caps.media_encoder ? undefined : 'Optional. Needed only if aerender cannot produce your format.');
-  add('FFmpeg', caps.ffmpeg ? 'ok' : 'warn', caps.tools.ffmpeg.version ? `ffmpeg ${caps.tools.ffmpeg.version}` : (caps.tools.ffmpeg.error || 'not found'), caps.ffmpeg ? undefined : 'Install FFmpeg (https://ffmpeg.org/download.html) and put it on PATH, or set XOXO_FFMPEG. Needed for asset probing, narration analysis, H.264 output and render verification.');
-  add('FFprobe', caps.ffprobe ? 'ok' : 'warn', caps.tools.ffprobe.version || caps.tools.ffprobe.error || 'not found');
+  for (const [label, key, why] of [['FFmpeg', 'ffmpeg', 'asset probing, narration analysis, H.264 output, render verification'], ['FFprobe', 'ffprobe', 'asset metadata and render verification']]) {
+    const t = caps.tools[key]; const r = config.tools[key];
+    if (t.available) add(label, 'ok', `${t.path}  (v${t.version}, from ${t.source === 'config' ? 'config' : t.source === 'env' ? 'XOXO_' + key.toUpperCase() : 'PATH'})${(t.warnings || []).length ? '\n      note: ' + t.warnings.join('; ') : ''}`);
+    else add(label, 'warn', r.ok ? t.error : describeTried(r), `Needed for ${why}. Any ONE of: put ${key} on PATH; set XOXO_${key.toUpperCase()}="<full path to ${key}${process.platform === 'win32' ? '.exe' : ''}>" (setx only affects terminals opened afterwards); or run: xoxo config set ${key} "<full path>"  (saved to xoxo.config.json).`);
+  }
   add('Python', caps.python ? 'ok' : 'skip', caps.tools.python.version || 'not found (optional)');
   add('Whisper (transcription)', caps.whisper ? 'ok' : 'skip', caps.whisper ? 'whisper CLI found' : 'not found (optional): without it, provide a script or SRT for caption timing');
   add('Fonts', caps.fonts.files.length ? 'ok' : 'warn', `${caps.fonts.files.length} font files visible`);
@@ -138,6 +148,34 @@ export async function doctor(ctx, { connect = false } = {}) {
   const failed = checks.filter((c) => c.status === 'fail');
   return { success: failed.length === 0, operation: 'doctor', data: { checks, ready: failed.length === 0 }, ...(failed.length ? { error: `${failed.length} blocking problem(s): ${failed.map((c) => c.name).join(', ')}`, recoverable: true } : {}) };
 }
+
+// ---------------- config ----------------
+const SETTABLE = ['ffmpeg', 'ffprobe', 'whisper', 'aePath', 'aerenderPath', 'mediaEncoderPath', 'transport', 'bridgeDir'];
+const configFile = (ctx) => ctx.env.XOXO_CONFIG || path.join(ctx.config.root, 'xoxo.config.json');
+
+/** Persist a setting to xoxo.config.json. Tool paths are validated first so a typo can't be saved. */
+export const configSet = (ctx, key, value) => attempt('config_set', () => {
+  if (!SETTABLE.includes(key)) throw new Error(`cannot set "${key}" (settable: ${SETTABLE.join(', ')})`);
+  let store = value;
+  if (TOOL_SPECS[key]) {
+    const r = resolveTool(key, { explicit: value, envVar: null, env: ctx.env, cwd: ctx.config.root });
+    if (!r.ok) throw new Error(r.error);
+    store = normalizeToolPath(value, { env: ctx.env, cwd: ctx.config.root }); // quotes stripped, separators normalised
+  }
+  const file = configFile(ctx);
+  let cur = {}; try { cur = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { /* new file */ }
+  cur[key] = store;
+  fs.writeFileSync(file, JSON.stringify(cur, null, 2) + '\n');
+  return { file, key, value: store, ...(TOOL_SPECS[key] ? { resolvedTo: resolveTool(key, { explicit: store, envVar: null, env: ctx.env, cwd: ctx.config.root }).path } : {}) };
+});
+
+export const configUnset = (ctx, key) => attempt('config_unset', () => {
+  const file = configFile(ctx);
+  let cur = {}; try { cur = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { /* nothing to unset */ }
+  const had = key in cur; delete cur[key];
+  fs.writeFileSync(file, JSON.stringify(cur, null, 2) + '\n');
+  return { file, key, removed: had };
+});
 
 // ---------------- bridge ----------------
 export async function bridgeInstall(ctx, { startup = false } = {}) {

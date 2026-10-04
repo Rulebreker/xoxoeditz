@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { tmpDir, NO_FAKE_EXE } from './helpers/env.js';
+import { tmpDir, NO_FAKE_EXE, baseEnv } from './helpers/env.js';
 import { hasFfmpeg, makeAssetFolder } from './helpers/media.js';
 import { createContext, newProject, scanProject, analyzeProjectNarration, scaffoldProjectPlan, validateProjectPlan, editProject, verifyProject, renderProjectCmd, statusProject, detect } from '../src/app/services.js';
 import { createMockAE } from '../src/bridge/mock-ae.js';
@@ -17,7 +17,7 @@ async function project({ effects, resolution = '720p', transport = 'mock' } = {}
   const assets = makeAssetFolder(path.join(root, 'assets'));
   fs.writeFileSync(path.join(assets, 'script.txt'), SCRIPT);
   process.env.FAKE_AERENDER_MAXW = '1280';
-  const ctx = createContext({ cwd: root, env: {}, overrides: { transport, aerenderPath: FAKE_AERENDER }, mockAE: effects ? createMockAE({ effects }) : createMockAE() });
+  const ctx = createContext({ cwd: root, env: baseEnv(), overrides: { transport, aerenderPath: FAKE_AERENDER }, mockAE: effects ? createMockAE({ effects }) : createMockAE() });
   const must = (r) => { assert.equal(r.success, true, `${r.operation}: ${r.error}`); return r.data; };
   must(await newProject(ctx, 'j20', { assets }));
   must(await scanProject(ctx, 'j20'));
@@ -176,7 +176,7 @@ test('dry-run never touches the real project file', { skip: !hasFfmpeg }, async 
 });
 
 test('detect works on this machine and reports honestly', async () => {
-  const ctx = createContext({ cwd: tmpDir(), env: {}, overrides: { transport: 'mock' } });
+  const ctx = createContext({ cwd: tmpDir(), env: baseEnv(), overrides: { transport: 'mock' } });
   const r = await detect(ctx);
   assert.equal(r.success, true);
   const c = r.data.capabilities;

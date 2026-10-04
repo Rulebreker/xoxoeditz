@@ -44,7 +44,7 @@ Output defaults to 3840×2160 / 16:9 / 24 fps but any of 720p…8K, 9:16, 1:1, 2
 3. ```
    git clone https://github.com/Rulebreker/xoxoeditz && cd xoxoeditz
    npm run setup          # installs the bridge scripts and runs the doctor
-   node bin/xoxo.js doctor --connect
+   node bin/xoxo.js doctor --connect      # FFmpeg not on PATH? node bin/xoxo.js config set ffmpeg "<path to ffmpeg.exe>"  (same for ffprobe)
    node bin/xoxo.js selftest      # builds + renders a tiny project in the real After Effects
    claude
    ```

@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { run } from '../core/exec.js';
+import { runTool } from '../core/resolve-tool.js';
 import { ensureDir, writeJson } from '../core/paths.js';
 import { round } from '../core/time.js';
 
@@ -25,8 +25,8 @@ export function parseVolumeDetect(stderr) {
 }
 
 export async function measureAudio(config, file, { noiseDb = -35, minSilence = 0.35 } = {}) {
-  const r = await run(config.ffmpeg, ['-hide_banner', '-nostats', '-protocol_whitelist', 'file', '-i', file, '-af', `silencedetect=noise=${noiseDb}dB:d=${minSilence},volumedetect`, '-f', 'null', '-'], { timeoutMs: 10 * 60 * 1000 });
-  if (r.error) throw new Error(`ffmpeg unavailable: ${r.error}`);
+  const r = await runTool(config, 'ffmpeg', ['-hide_banner', '-nostats', '-protocol_whitelist', 'file', '-i', file, '-af', `silencedetect=noise=${noiseDb}dB:d=${minSilence},volumedetect`, '-f', 'null', '-'], { timeoutMs: 10 * 60 * 1000 });
+  if (r.error) throw new Error(r.error);
   const dur = /Duration:\s*(\d+):(\d+):([\d.]+)/.exec(r.stderr);
   const duration = dur ? Number(dur[1]) * 3600 + Number(dur[2]) * 60 + Number(dur[3]) : null;
   const silences = parseSilenceDetect(r.stderr);
@@ -106,7 +106,7 @@ export async function transcribeWithWhisper(config, audioFile, outDir, { model =
   ensureDir(outDir);
   const args = [audioFile, '--model', model, '--output_format', 'json', '--word_timestamps', 'True', '--output_dir', outDir, '--verbose', 'False'];
   if (language) args.push('--language', language);
-  const r = await run(config.whisper, args, { timeoutMs: 60 * 60 * 1000 });
+  const r = await runTool(config, 'whisper', args, { timeoutMs: 60 * 60 * 1000 });
   if (r.error || r.code !== 0) throw new Error(`whisper failed: ${r.error || r.stderr.split('\n').slice(-3).join(' ')}`);
   const jf = path.join(outDir, path.basename(audioFile).replace(/\.[^.]+$/, '') + '.json');
   const j = JSON.parse(fs.readFileSync(jf, 'utf8'));

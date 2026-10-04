@@ -3,7 +3,7 @@ import path from 'node:path';
 import { typeOf, inferAudioRole, assetIdPrefix, keywordsFor } from './classify.js';
 import { probeFile } from './probe.js';
 import { ident, isInside, readJson, writeJson, ensureDir } from '../core/paths.js';
-import { run } from '../core/exec.js';
+import { runTool } from '../core/resolve-tool.js';
 
 const SKIP_DIRS = new Set(['node_modules', '.git', '.xoxo', '__MACOSX', '$RECYCLE.BIN', 'System Volume Information']);
 
@@ -122,7 +122,7 @@ export async function makeThumbnails(config, manifest, outDir, { width = 640, on
     const args = ['-v', 'error', '-y', '-protocol_whitelist', 'file'];
     if (a.type === 'video') args.push('-ss', String(Math.max(0, (a.meta?.duration || 0) / 3).toFixed(2)));
     args.push('-i', a.path, '-frames:v', '1', '-vf', `scale='min(${width},iw)':-2`, out);
-    const r = await run(config.ffmpeg, args, { timeoutMs: 60000 });
+    const r = await runTool(config, 'ffmpeg', args, { timeoutMs: 60000 });
     if (!r.error && r.code === 0 && fs.existsSync(out)) made.push({ id: a.id, file: out });
   }
   return made;

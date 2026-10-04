@@ -5,7 +5,7 @@ import * as S from '../app/services.js';
 import { formatDoctor, formatEdit, formatQa, formatStatus, formatEffects, formatRender, formatGeneric, red, green, dim, bold } from './format.js';
 import { readJson, writeJson, ensureDir } from '../core/paths.js';
 import { synthesizeSfx, SYNTH } from '../audio/synth.js';
-import { run } from '../core/exec.js';
+import { runTool } from '../core/resolve-tool.js';
 import { OPS_DOC } from '../bridge/ops-doc.js';
 
 const HELP = `
@@ -32,7 +32,7 @@ ${bold('Setup & tools')}
   xoxo sfx <whoosh|impact|riser|tick> [--out file]
   xoxo selftest [--dry-run]          end-to-end smoke test with generated media
   xoxo mcp                           MCP server on stdio (used by Claude Code)
-  xoxo config                        show effective configuration
+  xoxo config [set <key> <value> | unset <key>]   show / persist settings (e.g. xoxo config set ffmpeg "C:\\tools\\ffmpeg\\bin\\ffmpeg.exe")
 
 Add ${bold('--json')} to any command for machine-readable output. Docs: README.md, docs/.
 `;
@@ -85,7 +85,11 @@ export async function main(argv) {
         return d.success && r.success ? 0 : 1;
       }
       case 'effects': return emit(o, await S.effects(ctx), formatEffects);
-      case 'config': return emit(o, { success: true, operation: 'config', data: ctx.config }, (d) => JSON.stringify(d, null, 2));
+      case 'config': {
+        if (name === 'set') { if (pos.length < 3) { console.error('usage: xoxo config set <ffmpeg|ffprobe|whisper|aePath|aerenderPath|mediaEncoderPath|transport|bridgeDir> <value>'); return 2; } return emit(o, await S.configSet(ctx, pos[1], pos.slice(2).join(' ')), (d) => `${green('✓')} ${d.key} saved to ${d.file}${d.resolvedTo ? '\n  resolves to ' + d.resolvedTo : ''}`); }
+        if (name === 'unset') { if (!pos[1]) { console.error('usage: xoxo config unset <key>'); return 2; } return emit(o, await S.configUnset(ctx, pos[1]), (d) => `${green('✓')} ${d.key} ${d.removed ? 'removed from' : 'was not set in'} ${d.file}`); }
+        return emit(o, { success: true, operation: 'config', data: ctx.config }, (d) => JSON.stringify(d, null, 2));
+      }
       case 'new': if (!name) { console.error('usage: xoxo new <name> [--assets dir]'); return 2; } return emit(o, await S.newProject(ctx, name, { assets: o.assets }), (d) => `${green('✓')} project ${d.name} created at ${d.root}\n  assets: ${d.assetsDir}\n  next:   ${d.next}`);
       case 'assets': return emit(o, await S.scanProject(ctx, name, { dir: o.dir || o.assets, thumbs: o.thumbs, probe: !o['no-probe'] }), (d) => [`${green('✓')} ${d.assets.length} assets  ${JSON.stringify(d.counts)}`, ...d.assets.map((a) => `  ${a.id.padEnd(28)} ${a.type.padEnd(8)} ${[a.role && `${a.role}${a.roleConfidence < 0.5 ? '?' : ''}`, a.size, a.duration && `${a.duration}s`].filter(Boolean).join('  ')}`), ...d.warnings.map((w) => `  ${red('!')} ${w}`), ...(d.thumbnails.length ? ['', `thumbnails: ${path.dirname(d.thumbnails[0])}`] : []), '', dim(d.hint)].join('\n'));
       case 'narration': return emit(o, await S.analyzeProjectNarration(ctx, name, { audio: o.audio, script: o.script, subtitles: o.subtitles, transcribe: o.transcribe, noiseDb: o['noise-db'] ? Number(o['noise-db']) : undefined }), (d) => [`${green('✓')} narration ${d.duration}s, ${d.speechSegments} speech segments, ${d.pauses} long pauses, transcript: ${d.transcript.method}`, ...d.scenes.map((s) => `  ${s.id} ${s.start}–${s.end}s  ${s.text}`), ...d.notes.map((n) => dim(n))].join('\n'));
@@ -170,7 +174,7 @@ async function selftest(ctx, o) {
   const dir = path.join(ctx.config.workspace, 'selftest');
   const assets = path.join(dir, 'assets');
   ensureDir(assets);
-  const ff = async (args) => { const r = await run(ctx.config.ffmpeg, ['-v', 'error', '-y', ...args], { timeoutMs: 120000 }); if (r.error || r.code !== 0) throw new Error(`ffmpeg: ${r.error || r.stderr}`); };
+  const ff = async (args) => { const r = await runTool(ctx.config, 'ffmpeg', ['-v', 'error', '-y', ...args], { timeoutMs: 120000 }); if (r.error || r.code !== 0) throw new Error(`ffmpeg: ${r.error || r.stderr}`); };
   await ff(['-f', 'lavfi', '-i', 'testsrc2=s=1920x1080:d=0.04', '-frames:v', '1', path.join(assets, 'test_pattern.png')]);
   await ff(['-f', 'lavfi', '-i', 'smptebars=s=1280x720:d=0.04', '-frames:v', '1', path.join(assets, 'color_bars.jpg')]);
   await ff(['-f', 'lavfi', '-i', 'sine=frequency=220:duration=3', '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=mono', '-f', 'lavfi', '-i', 'sine=frequency=260:duration=3', '-filter_complex', '[0][1][2]concat=n=3:v=0:a=1', '-t', '8', path.join(assets, 'narration.wav')]);

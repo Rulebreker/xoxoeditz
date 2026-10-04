@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { REPO_ROOT } from './paths.js';
+import { resolveAllTools } from './resolve-tool.js';
 
 const bool = (v) => v === '1' || v === 'true' || v === 'yes';
 
@@ -13,9 +14,10 @@ export const DEFAULTS = {
   aePath: null, // explicit AfterFX binary OR install root
   aerenderPath: null,
   mediaEncoderPath: null,
-  ffmpeg: 'ffmpeg',
-  ffprobe: 'ffprobe',
-  whisper: 'whisper',
+  // null = not set explicitly. Resolution (config -> XOXO_* env -> PATH) happens in src/core/resolve-tool.js.
+  ffmpeg: null,
+  ffprobe: null,
+  whisper: null,
   allowRawEval: false, // lets Claude run arbitrary ExtendScript. Off by default.
   allowInstall: false, // unattended plugin/software install. Off by default; see docs.
   extraAdobeRoots: [],
@@ -32,8 +34,7 @@ export function loadConfig({ cwd = REPO_ROOT, env = process.env, overrides = {} 
 
   if (env.XOXO_AE_PATH) cfg.aePath = env.XOXO_AE_PATH;
   if (env.XOXO_AERENDER_PATH) cfg.aerenderPath = env.XOXO_AERENDER_PATH;
-  if (env.XOXO_FFMPEG) cfg.ffmpeg = env.XOXO_FFMPEG;
-  if (env.XOXO_FFPROBE) cfg.ffprobe = env.XOXO_FFPROBE;
+  // XOXO_FFMPEG / XOXO_FFPROBE / XOXO_WHISPER are read by the tool resolver, below the explicit config value.
   if (env.XOXO_TRANSPORT) cfg.transport = env.XOXO_TRANSPORT;
   if (env.XOXO_BRIDGE_DIR) cfg.bridgeDir = env.XOXO_BRIDGE_DIR;
   if (env.XOXO_WORKSPACE) cfg.workspace = env.XOXO_WORKSPACE;
@@ -49,5 +50,6 @@ export function loadConfig({ cwd = REPO_ROOT, env = process.env, overrides = {} 
   cfg.bridgeDir = cfg.bridgeDir ? abs(cfg.bridgeDir) : path.join(cfg.workspace, 'bridge');
   cfg.logDir = path.join(cfg.workspace, 'logs');
   cfg.capabilitiesFile = path.join(cfg.workspace, 'capabilities.json');
+  cfg.tools = resolveAllTools(cfg, env); // { ffmpeg, ffprobe, whisper } -> { ok, path, source, tried, ... }
   return cfg;
 }

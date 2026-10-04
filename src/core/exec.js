@@ -19,9 +19,11 @@ export function isAllowedExecutable(cmd) {
 /**
  * Run an allowlisted executable. Never throws: resolves {code, stdout, stderr, error?, timedOut?}.
  */
-export function run(cmd, args = [], { timeoutMs = 30000, cwd, input, maxBuffer = 64 * 1024 * 1024 } = {}) {
+export function run(cmd, args = [], { timeoutMs = 30000, cwd, input, maxBuffer = 64 * 1024 * 1024, trusted = false } = {}) {
   return new Promise((resolve) => {
-    if (!isAllowedExecutable(cmd)) {
+    // `trusted` = the path was validated by src/core/resolve-tool.js (an existing executable the USER configured,
+    // so its file name may legitimately be e.g. ffmpeg-8.0.exe). Untrusted callers still hit the name allowlist.
+    if (!trusted && !isAllowedExecutable(cmd)) {
       resolve({ code: -1, stdout: '', stderr: '', error: `executable not on allowlist: ${cmd}` });
       return;
     }

@@ -6,6 +6,9 @@ import { loadConfig } from '../../src/core/config.js';
 
 process.env.XOXO_TEST_ALLOW = [process.env.XOXO_TEST_ALLOW, 'fake-afterfx.mjs', 'fake-aerender.mjs'].filter(Boolean).join(',');
 
+/** Minimal environment for contexts under test: only PATH, so XOXO_* variables from the real shell can't leak in. */
+export const baseEnv = () => ({ PATH: process.env.PATH ?? process.env.Path ?? '' });
+
 export function tmpDir(prefix = 'xoxo-test-') {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
@@ -13,7 +16,7 @@ export function tmpDir(prefix = 'xoxo-test-') {
 /** An isolated workspace: own config, bridge dir, projects dir. */
 export function testConfig(overrides = {}) {
   const root = tmpDir();
-  const cfg = loadConfig({ cwd: root, env: {}, overrides: { transport: 'mock', ...overrides } });
+  const cfg = loadConfig({ cwd: root, env: baseEnv(), overrides: { transport: 'mock', ...overrides } });
   fs.mkdirSync(cfg.workspace, { recursive: true });
   return cfg;
 }

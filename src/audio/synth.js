@@ -3,7 +3,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { run } from '../core/exec.js';
+import { runTool } from '../core/resolve-tool.js';
 import { ensureDir } from '../core/paths.js';
 
 export const SYNTH = {
@@ -19,7 +19,7 @@ export async function synthesizeSfx(config, kind, outDir) {
   ensureDir(outDir);
   const out = path.join(outDir, `generated_sfx_${kind}.wav`);
   if (fs.existsSync(out) && fs.statSync(out).size > 1000) return out;
-  const r = await run(config.ffmpeg, ['-v', 'error', '-y', ...def.args, '-ac', '2', '-ar', '48000', out], { timeoutMs: 60000 });
+  const r = await runTool(config, 'ffmpeg', ['-v', 'error', '-y', ...def.args, '-ac', '2', '-ar', '48000', out], { timeoutMs: 60000 });
   if (r.error || r.code !== 0) throw new Error(`ffmpeg could not synthesize ${kind}: ${r.error || r.stderr}`);
   return out;
 }

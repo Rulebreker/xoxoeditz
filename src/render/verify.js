@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { run } from '../core/exec.js';
+import { runTool } from '../core/resolve-tool.js';
 import { parseFfprobe } from '../assets/probe.js';
 
 export function parseBlackDetect(stderr) {
@@ -20,7 +20,7 @@ export async function verifyRender(config, file, expect = {}) {
   if (!fs.existsSync(file)) { add('exists', false, `${file} does not exist`); return { passed: false, checks }; }
   const size = fs.statSync(file).size;
   add('size', size > 10_000, `${(size / 1e6).toFixed(2)} MB`);
-  const r = await run(config.ffprobe, ['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', file], { timeoutMs: 120000 });
+  const r = await runTool(config, 'ffprobe', ['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', file], { timeoutMs: 120000 });
   if (r.error || r.code !== 0) {
     add('probe', false, `ffprobe unavailable or failed (${r.error || r.stderr.split('\n')[0]}); content could not be verified`, 'warning');
     return { passed: checks.every((c) => c.ok || c.severity === 'warning'), checks, probe: null };
@@ -35,7 +35,7 @@ export async function verifyRender(config, file, expect = {}) {
   }
   if (expect.audio) add('audio-stream', meta.hasAudio, meta.hasAudio ? `${meta.audioCodec} ${meta.audioChannels}ch` : 'no audio stream although the plan has audio');
   if (expect.blackCheck !== false && meta.width) {
-    const b = await run(config.ffmpeg, ['-hide_banner', '-nostats', '-i', file, '-an', '-vf', 'blackdetect=d=1:pic_th=0.98:pix_th=0.04', '-f', 'null', '-'], { timeoutMs: 15 * 60 * 1000 });
+    const b = await runTool(config, 'ffmpeg', ['-hide_banner', '-nostats', '-i', file, '-an', '-vf', 'blackdetect=d=1:pic_th=0.98:pix_th=0.04', '-f', 'null', '-'], { timeoutMs: 15 * 60 * 1000 });
     if (!b.error) {
       const black = parseBlackDetect(b.stderr);
       const total = black.reduce((a, x) => a + x.duration, 0);
@@ -52,7 +52,7 @@ export async function extractFrames(config, video, times, outDir, { width = 960 
   const made = [];
   for (const t of times) {
     const out = `${outDir}/frame_${String(Math.round(t * 1000)).padStart(7, '0')}ms.jpg`;
-    const r = await run(config.ffmpeg, ['-v', 'error', '-y', '-ss', String(t), '-i', video, '-frames:v', '1', '-vf', `scale=${width}:-2`, out], { timeoutMs: 60000 });
+    const r = await runTool(config, 'ffmpeg', ['-v', 'error', '-y', '-ss', String(t), '-i', video, '-frames:v', '1', '-vf', `scale=${width}:-2`, out], { timeoutMs: 60000 });
     if (!r.error && r.code === 0 && fs.existsSync(out)) made.push({ time: t, file: out });
   }
   return made;

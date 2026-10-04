@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { run } from '../core/exec.js';
+import { runTool } from '../core/resolve-tool.js';
 import { ensureDir, slug, toAePath } from '../core/paths.js';
 import { buildAerenderArgs, runAerender } from './aerender.js';
 import { verifyRender, extractFrames } from './verify.js';
@@ -120,7 +120,7 @@ export async function renderProject(opts) {
     if (!found) return fail(`aerender reported success but no file named ${stem}.* appeared in ${paths.renders} (check the output module template "${strategy.omTemplate}")`);
     interPath = path.join(paths.renders, found);
     onProgress({ phase: 'transcode' });
-    const tr = await run(config.ffmpeg, transcodeArgs(interPath, finalPath, plan, { preview, scaleWidth: preview ? 960 : null }), { timeoutMs: config.timeouts.renderMs });
+    const tr = await runTool(config, 'ffmpeg', transcodeArgs(interPath, finalPath, plan, { preview, scaleWidth: preview ? 960 : null }), { timeoutMs: config.timeouts.renderMs });
     if (tr.error || tr.code !== 0) return fail(`ffmpeg transcode failed: ${tr.error || tr.stderr.split('\n').slice(-3).join(' ')}`);
     steps.push('transcoded with FFmpeg');
     if (!keepIntermediate) { try { fs.unlinkSync(interPath); } catch { /* */ } }

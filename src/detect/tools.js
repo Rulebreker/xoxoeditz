@@ -1,4 +1,5 @@
 import { run } from '../core/exec.js';
+import { runTool } from '../core/resolve-tool.js';
 
 async function version(cmd, args, parse) {
   const r = await run(cmd, args, { timeoutMs: 8000 });
@@ -7,10 +8,23 @@ async function version(cmd, args, parse) {
   return { available: true, path: cmd, version: parse ? parse(text) : text.split('\n')[0] };
 }
 
+/** Confirm a resolved managed tool really runs, and report where it came from. */
+async function probeManaged(config, name, args, parse) {
+  const r = config.tools?.[name];
+  if (!r?.ok) return { available: false, path: null, source: null, error: r?.error || `${name} not resolved`, tried: r?.tried || [] };
+  const out = await runTool(config, name, args, { timeoutMs: 8000 });
+  if (out.error || out.code !== 0) {
+    return { available: false, path: r.path, source: r.source, error: `${r.path} was found but did not run: ${out.error || (out.stderr || '').split('\n')[0] || 'exit ' + out.code}`, tried: r.tried };
+  }
+  const text = (out.stdout || out.stderr).trim();
+  return { available: true, path: r.path, source: r.source, version: parse ? parse(text) : text.split('\n')[0], warnings: r.warnings, tried: r.tried };
+}
+
 export async function detectTools(config) {
+  const ver = (t) => /version\s+(\S+)/.exec(t)?.[1] ?? t.split('\n')[0];
   const [ffmpeg, ffprobe, python, whisper] = await Promise.all([
-    version(config.ffmpeg, ['-version'], (t) => /version\s+(\S+)/.exec(t)?.[1] ?? t.split('\n')[0]),
-    version(config.ffprobe, ['-version'], (t) => /version\s+(\S+)/.exec(t)?.[1] ?? t.split('\n')[0]),
+    probeManaged(config, 'ffmpeg', ['-version'], ver),
+    probeManaged(config, 'ffprobe', ['-version'], ver),
     (async () => {
       for (const c of process.platform === 'win32' ? ['python', 'py'] : ['python3', 'python']) {
         const r = await version(c, ['--version']);
@@ -18,7 +32,7 @@ export async function detectTools(config) {
       }
       return { available: false, error: 'python not found' };
     })(),
-    version(config.whisper, ['--help'], () => 'present'),
+    probeManaged(config, 'whisper', ['--help'], () => 'present'),
   ]);
   return {
     node: { available: true, path: process.execPath, version: process.version },

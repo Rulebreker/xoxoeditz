@@ -25,6 +25,32 @@
    ```
 4. `claude` in the repository folder. Accept the project MCP server (`.mcp.json`) when asked.
 
+## FFmpeg / FFprobe not on PATH
+All FFmpeg/FFprobe (and optional Whisper) use goes through one resolver (`src/core/resolve-tool.js`). It tries, in order:
+
+1. **explicit config** - `"ffmpeg"` / `"ffprobe"` in `xoxo.config.json` (easiest: `xoxo config set ffmpeg "<full path>"`)
+2. **environment** - `XOXO_FFMPEG` / `XOXO_FFPROBE`
+3. **PATH**
+4. otherwise a clear failure that lists what was tried and why each was rejected.
+
+A value may be the `.exe` (or extension-less), the `bin` folder, or the install folder; paths with spaces, forward or back
+slashes, and surrounding quotes are fine. A candidate must exist and be directly executable (`.cmd`/`.bat` shims are
+rejected: programs are always started without a shell). If a higher-priority source is invalid the next one is used and
+`xoxo doctor` says so. `xoxo doctor` prints the path actually in use and where it came from.
+
+```
+:: Windows cmd (this terminal only; `setx` applies to terminals opened afterwards)
+set XOXO_FFMPEG=C:\tools\ffmpeg\bin\ffmpeg.exe
+set XOXO_FFPROBE=C:\tools\ffmpeg\bin\ffprobe.exe
+# PowerShell
+$env:XOXO_FFMPEG = "C:\tools\ffmpeg\bin\ffmpeg.exe"
+$env:XOXO_FFPROBE = "C:\tools\ffmpeg\bin\ffprobe.exe"
+# or save it once, validated, for every future terminal / Claude Code session:
+node bin/xoxo.js config set ffmpeg "C:\tools\ffmpeg\bin\ffmpeg.exe"
+node bin/xoxo.js config set ffprobe "C:\tools\ffmpeg\bin\ffprobe.exe"
+```
+Claude Code and the MCP server read the environment when they start: restart them after changing variables, or use `config set`.
+
 ## Optional: live listener (faster)
 The default one-shot transport launches `AfterFX -r script.jsx` per call (works with no install). For lots of small
 calls the listener is quicker: in After Effects ▸ *File ▸ Scripts ▸ Run Script File…* ▸ `.xoxo/bridge/listener.jsx`.
@@ -39,7 +65,7 @@ Everything is auto-detected. Override only if needed, in `xoxo.config.json` (git
 |---------|---------|---------|
 | `aePath` | `XOXO_AE_PATH` | `AfterFX.exe` or the `Adobe After Effects 20xx` folder (if installed somewhere unusual) |
 | `aerenderPath` | `XOXO_AERENDER_PATH` | explicit `aerender` |
-| `ffmpeg` / `ffprobe` | `XOXO_FFMPEG` / `XOXO_FFPROBE` | binaries not on PATH |
+| `ffmpeg` / `ffprobe` / `whisper` | `XOXO_FFMPEG` / `XOXO_FFPROBE` / `XOXO_WHISPER` | binaries not on PATH (precedence: config > env > PATH; see above) |
 | `transport` | `XOXO_TRANSPORT` | `auto` (default) · `listener` · `cli` · `mock` |
 | `bridgeDir` | `XOXO_BRIDGE_DIR` | where job files live |
 | `allowRawEval` | `XOXO_ALLOW_RAW_EVAL=1` | allow arbitrary ExtendScript (**off**) |

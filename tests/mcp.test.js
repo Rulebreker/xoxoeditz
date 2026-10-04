@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { toolList, handleMessage } from '../src/mcp/server.js';
 import { createContext } from '../src/app/services.js';
-import { tmpDir } from './helpers/env.js';
+import { tmpDir, baseEnv } from './helpers/env.js';
 
 const BIN = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'bin', 'xoxo.js');
 
@@ -21,7 +21,7 @@ test('tool definitions are well-formed', () => {
 });
 
 test('handleMessage: initialize, list, call, unknown method', async () => {
-  const ctx = createContext({ cwd: tmpDir(), env: {}, overrides: { transport: 'mock' } });
+  const ctx = createContext({ cwd: tmpDir(), env: baseEnv(), overrides: { transport: 'mock' } });
   const init = await handleMessage(ctx, { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-03-26' } });
   assert.equal(init.result.protocolVersion, '2025-03-26');
   assert.equal(init.result.serverInfo.name, 'xoxoeditz');
