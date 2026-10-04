@@ -1,0 +1,22 @@
+node_modules/
+.xoxo/
+xoxo.config.json
+.env
+.env.*
+*.log
+# user content: keep the folders, not the media
+assets/*
+!assets/.gitkeep
+!assets/README.md
+projects/*
+!projects/.gitkeep
+!projects/README.md
+*.aep
+*.aepx
+*.mp4
+*.mov
+*.wav
+*.mp3
+!tests/fixtures/**
+.DS_Store
+Thumbs.db
