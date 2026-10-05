@@ -19,11 +19,35 @@ const sampled = (c, prop, from, to, curveSpec, n = 6, t0 = c.t, d = c.d) => {
   return ['keyframes', { comp: c.comp, layer: c.layer, prop, keys, ease: 'linear' }];
 };
 const slideOffset = (c) => (c.dir === 180 ? -1 : 1) * c.h * 0.045;
+// Position moves are RELATIVE to wherever text_fit finally put the layer (offset -> [0,0]), so the entrance always
+// settles exactly on the fitted position.
+const slideRel = (c, off, n = 6) => { const f = curve('ease-out-expo'); const keys = []; for (let i = 0; i <= n; i++) { const u = i / n; const e = f(u); keys.push(T(+(c.t + c.d * u).toFixed(4), [+(off[0] * (1 - e)).toFixed(3), +(off[1] * (1 - e)).toFixed(3)])); } return ['keyframes', { comp: c.comp, layer: c.layer, prop: 'position', keys, ease: 'linear', relative: true }]; };
 
-/** Exit animations (all animations may use them): fade out over `out.d`. */
+/**
+ * Exit animation (all animations may use it): fade out over `out.d`. APPENDS to the opacity keys (clear:false) - the
+ * old version replaced them, which silently deleted every entrance fade. Keys stay inside the layer's interval.
+ */
 export function exitOps(c) {
   if (!c.out) return [];
-  return [key(c.comp, c.layer, 'opacity', [T(c.out.t, 100), T(c.out.t + c.out.d, 0)], 'easeIn')];
+  return [['keyframes', { comp: c.comp, layer: c.layer, prop: 'opacity', keys: [T(c.out.t, 100), T(c.out.t + c.out.d, 0)], ease: 'linear', clear: false }]];
+}
+
+/**
+ * Extra fallback animations for roles that must never go missing, tried after the animation's own chain and before the
+ * plain static layer. TITLE: slide -> mask reveal -> opacity -> position only. END_CARD: fade -> scale -> controlled exit.
+ */
+export function roleFallbacks(role) {
+  if (role === 'TITLE') return [
+    { id: 'title_slide', quality: 0.5, build: (c) => [fadeIn(c, 0, 0.7), slideRel(c, [0, slideOffset(c)])] },
+    { id: 'title_opacity', quality: 0.3, build: (c) => [fadeIn(c, 0, 1)] },
+    { id: 'title_position', quality: 0.2, build: (c) => [slideRel(c, [0, slideOffset(c)])] },
+  ];
+  if (role === 'END_CARD') return [
+    { id: 'end_fade', quality: 0.4, build: (c) => [fadeIn(c, 0, 1)] },
+    { id: 'end_scale', quality: 0.3, build: (c) => [fadeIn(c, 0, 0.6), sampled(c, 'scale', [96, 96], [100, 100], 'ease-out')] },
+    { id: 'end_controlled_exit', quality: 0.2, build: () => [] }, // static in, the standard exit fade follows
+  ];
+  return [];
 }
 
 const nativeReveal = (mode, unit) => (c) => [['text_reveal', { comp: c.comp, layer: c.layer, mode, start: c.t, duration: c.d, ...(unit ? { unit } : {}), ...(mode === 'tracking_in' ? { tracking: Math.round(40 + 60 * (c.strength ?? 0.5)) } : {}) }]];
@@ -33,7 +57,7 @@ export const TEXT_ANIM_ENTRIES = {
   'text.anim.fade': { category: 'text_anim', description: 'Plain fade up.', implementations: [{ id: 'fade', quality: 1, requires: {}, build: (c) => [fadeIn(c)] }] },
 
   'text.anim.slide': { category: 'text_anim', description: 'Slides a short distance while fading in.', implementations: [
-    { id: 'slide', quality: 1, requires: {}, build: (c) => [fadeIn(c, 0, 0.7), sampled(c, 'position', [c.pos[0], c.pos[1] + slideOffset(c)], c.pos, 'ease-out-expo')] },
+    { id: 'slide', quality: 1, requires: {}, build: (c) => [fadeIn(c, 0, 0.7), slideRel(c, [0, slideOffset(c)])] },
     fadeFallback,
   ] },
 
@@ -52,7 +76,7 @@ export const TEXT_ANIM_ENTRIES = {
       ['layer_effect_add', { comp: c.comp, layer: c.layer, matchName: r.effects[WIPE.matchName], name: 'Wipe', tag: 'textwipe', params: { 'Wipe Angle': c.dir === 180 ? 270 : 90, Feather: Math.round(c.h * 0.012) } }],
       ['effect_param_keys', { comp: c.comp, layer: c.layer, effect: 'XOXO:textwipe:Wipe', param: 'Transition Completion', keys: [T(c.t, 100), T(c.t + c.d, 0)] }],
     ] },
-    { id: 'slide', quality: 0.6, requires: {}, build: (c) => [fadeIn(c, 0, 0.7), sampled(c, 'position', [c.pos[0] + slideOffset(c) * 2, c.pos[1]], c.pos, 'ease-out-expo')] },
+    { id: 'slide', quality: 0.6, requires: {}, build: (c) => [fadeIn(c, 0, 0.7), slideRel(c, [slideOffset(c) * 2, 0])] },
     fadeFallback,
   ] },
 
@@ -75,7 +99,7 @@ export const TEXT_ANIM_ENTRIES = {
   ] },
 
   'text.anim.scale_punch': { category: 'text_anim', description: 'Slams in oversized and settles with a small overshoot.', implementations: [
-    { id: 'overshoot_scale', quality: 1, requires: {}, build: (c) => [key(c.comp, c.layer, 'opacity', [T(c.t, 0), T(c.t + Math.min(0.08, c.d * 0.25), 100)], 'linear'), sampled(c, 'scale', [165, 165], [100, 100], 'overshoot:0.18', 8)] },
+    { id: 'overshoot_scale', quality: 1, requires: {}, build: (c) => [key(c.comp, c.layer, 'opacity', [T(c.t, 0), T(c.t + Math.min(0.08, c.d * 0.25), 100)], 'linear'), sampled(c, 'scale', [150, 150], [100, 100], 'overshoot:0.18', 8)] },
     fadeFallback,
   ] },
 
@@ -87,7 +111,8 @@ export const TEXT_ANIM_ENTRIES = {
       const end = c.t + total; const ops = [['layer_set', { comp: c.comp, layer: c.layer, props: { enabled: false } }]];
       words.forEach((w, i) => {
         const name = `${c.layer}_w${i + 1}`; const t0 = slots[i]; const t1 = i + 1 < words.length ? slots[i + 1] : end;
-        ops.push(['layer_add_text', { comp: c.comp, name, text: w, size: c.size, font: c.style?.font, color: c.style?.color, justify: 'center', allCaps: c.style?.allCaps, tracking: c.style?.tracking, position: c.pos, start: t0, end: Math.max(t1, t0 + 0.12) }]);
+        ops.push(['layer_add_text', { comp: c.comp, name, text: w, size: c.size, font: c.style?.font, color: c.style?.color, justify: 'center', caps: c.style?.allCaps ? 'upper' : undefined, tracking: c.style?.tracking, position: c.pos, start: t0, end: Math.min(end, Math.max(t1, t0 + 0.12)), role: c.role, mark: { k: 'text', role: c.role, id: name, shot: c.shot } }]);
+        if (c.fit) ops.push(['text_fit', { comp: c.comp, layer: name, ...c.fit, hAlign: 'center', maxLines: 1, at: Math.min(end - 0.01, t0 + 0.05) }]);
         ops.push(['keyframes', { comp: c.comp, layer: name, prop: 'scale', keys: [0, 0.2, 0.55, 1].map((u, j) => T(+(t0 + 0.14 * u).toFixed(4), [[135, 135], [96, 96], [102, 102], [100, 100]][j])), ease: 'linear' }]);
       });
       return ops;
@@ -108,10 +133,10 @@ export const TEXT_ANIM_ENTRIES = {
 };
 
 function flicker(c) {
-  const p = c.pos; const j = c.w * 0.012;
+  const j = c.w * 0.012; // jitter offsets are relative to the fitted position, ending on [0, 0]
   const u = [0, 0.15, 0.3, 0.45, 0.6, 0.8, 1];
   return [
     ['keyframes', { comp: c.comp, layer: c.layer, prop: 'opacity', ease: 'linear', keys: u.map((x, i) => ({ t: +(c.t + c.d * x).toFixed(4), v: [0, 100, 20, 100, 55, 100, 100][i], hold: x < 1 })) }],
-    ['keyframes', { comp: c.comp, layer: c.layer, prop: 'position', ease: 'linear', keys: u.map((x, i) => ({ t: +(c.t + c.d * x).toFixed(4), v: [p[0] + (i % 2 ? j : -j) * (6 - i) / 3, p[1] + ((i % 3) - 1) * j * 0.4], hold: x < 1 })) }],
-  ].map((o, i) => { if (i === 1) o[1].keys[o[1].keys.length - 1].v = [p[0], p[1]]; return o; });
+    ['keyframes', { comp: c.comp, layer: c.layer, prop: 'position', ease: 'linear', relative: true, keys: u.map((x, i) => ({ t: +(c.t + c.d * x).toFixed(4), v: i === u.length - 1 ? [0, 0] : [(i % 2 ? j : -j) * (6 - i) / 3, ((i % 3) - 1) * j * 0.4], hold: x < 1 })) }],
+  ];
 }

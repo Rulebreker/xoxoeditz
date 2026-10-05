@@ -22,19 +22,36 @@
 | **DARK_TITLE** | yes | no asset, text | Near-black field, slow title; a faint ghost of the footage breathes behind it. |
 | **END_CARD** | yes | no asset, text | Closing card: title, line of support, long hold, fade to black. |
 
-## Text kinds
+## Text kinds (= semantic roles)
 
-| Kind | Size (× frame height) | Default anchor | Max words | Case | Animations it may use |
-| --- | --- | --- | --- | --- | --- |
-| TITLE | 0.085 | 0.5, 0.5 | 6 | upper | scale_punch, mask_reveal, tracking_reveal, glitch_reveal, blur_reveal, fade, slide, kinetic |
-| SUBTITLE | 0.04 | 0.5, 0.66 | 12 | as-is | fade, slide, word_reveal, mask_reveal, blur_reveal |
-| LOWER_THIRD | 0.036 | 0.075, 0.84 | 8 | as-is | slide, mask_reveal, fade, tracking_reveal |
-| KEYWORD | 0.14 | 0.5, 0.5 | 2 | upper | scale_punch, glitch_reveal, kinetic, slide |
-| STAT | 0.17 | 0.5, 0.46 | 2 | as-is | scale_punch, fade, slide, mask_reveal |
-| CALLOUT | 0.03 | 0.62, 0.3 | 6 | upper | mask_reveal, slide, fade, glitch_reveal |
-| LABEL | 0.022 | 0.08, 0.11 | 4 | upper | character_reveal, fade, glitch_reveal |
-| HUD | 0.02 | 0.07, 0.1 | 6 | upper | character_reveal, glitch_reveal, fade |
-| END_CARD | 0.075 | 0.5, 0.45 | 8 | upper | fade, tracking_reveal, mask_reveal, blur_reveal |
+| Kind | Layer id | Size (× frame height) | Default anchor | Max words | Case | Animations it may use |
+| --- | --- | --- | --- | --- | --- | --- |
+| TITLE | TXT_TITLE_01 | 0.085 | 0.5, 0.5 | 6 | upper | scale_punch, mask_reveal, tracking_reveal, glitch_reveal, blur_reveal, fade, slide, kinetic |
+| SUBTITLE | TXT_SUB_01 | 0.04 | 0.5, 0.66 | 12 | as-is | fade, slide, word_reveal, mask_reveal, blur_reveal |
+| LOWER_THIRD | TXT_LOWER_01 | 0.036 | 0.075, 0.84 | 8 | as-is | slide, mask_reveal, fade, tracking_reveal |
+| KEYWORD | TXT_KEYWORD_01 | 0.14 | 0.5, 0.5 | 2 | upper | scale_punch, glitch_reveal, kinetic, slide |
+| STAT | TXT_STAT_01 | 0.17 | 0.5, 0.46 | 2 | as-is | scale_punch, fade, slide, mask_reveal |
+| CALLOUT | TXT_CALLOUT_01 | 0.03 | 0.62, 0.3 | 6 | upper | mask_reveal, slide, fade, glitch_reveal |
+| LABEL | TXT_LABEL_01 | 0.022 | 0.08, 0.11 | 4 | upper | character_reveal, fade, glitch_reveal |
+| HUD | TXT_HUD_01 | 0.02 | 0.07, 0.1 | 6 | upper | character_reveal, glitch_reveal, fade |
+| END_CARD | TXT_END_01 | 0.075 | 0.5, 0.45 | 8 | upper | fade, tracking_reveal, mask_reveal, blur_reveal |
+
+**Layout engine.** Text is placed inside the safe area (left 5%, right 5%, top 8%, bottom 10% of the frame) and out of the caption band. The Node side
+estimates (wrap first, shrink only when the line budget is used up); the host op `text_fit` then repeats the job with
+**measured** bounds (`sourceRectAtTime` at the layer's rest time): re-wrap into 1..N balanced lines, shrink the font in 6 % steps (never
+layer scale), align and clamp into the box. QA measures at the same rest time, never at comp time 0. Upper-casing is done on the string -
+`TextDocument.allCaps` is read-only in After Effects 2026 and is never written.
+
+**Intervals and ids.** Every text item has an explicit `start`, `end`, `duration`, `shotId`/`sceneId`, `role` and a deterministic id
+(`TXT_<ROLE>_<nn>`, numbered per role in time order, never derived from the display text). The interval lies inside the item's shot;
+animation keyframes lie inside the interval (animation never changes *when* text is visible); transitions do not touch text.
+
+**Overlap rules.** Headline roles (TITLE, END_CARD, KEYWORD, STAT) are mutually exclusive in time. Other roles may share the frame only in separate
+areas: TITLE + SUBTITLE / LOWER_THIRD / CAPTION / HUD / LABEL / CALLOUT, END_CARD + SUBTITLE / CAPTION / HUD / LOWER_THIRD,
+LOWER_THIRD + CAPTION / CALLOUT / HUD, CALLOUT + HUD / CAPTION, HUD + HUD, and so on (`textMayCoexist` in `src/typography/engine.js`).
+Two titles, a title and an end card, or a title and a keyword at once are an unintentional overlap (QA error `TEXT_OVERLAP`;
+`allowOverlap: true` on an item is the explicit opt-out). **Required** roles (TITLE, END_CARD when the Director asked for them) are built
+as required units: they have extra fallback animations, end in a plain static layer, and fail the build loudly instead of being dropped.
 
 ## Camera rigs
 

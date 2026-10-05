@@ -14,7 +14,7 @@ import { sfxCandidates, planSound } from './sound.js';
 import { chooseMusic } from './music.js';
 import { planTransitions } from '../transitions/engine.js';
 import { chooseTemplate, planShot } from '../compositing/templates.js';
-import { planText } from '../typography/engine.js';
+import { planText, captionZone } from '../typography/engine.js';
 import { CameraPlanner } from '../camera/rigs.js';
 import { VelocityPlanner, describeMap } from '../velocity/engine.js';
 import { VELOCITY_PROFILES } from '../velocity/profiles.js';
@@ -154,8 +154,8 @@ export function directTimeline(input) {
 
   // ---- text (global: collision-free across the whole timeline) ----
   const items = [];
-  shotPlans.forEach(({ shot, plan }) => {
-    for (const slot of plan.textSlots || []) items.push({ kind: slot.kind, text: slot.text, at: shot.start + slot.at, dur: slot.dur, target: slot.target, id: undefined, animation: (shot.isFirst && wantIntro && et.typography.animations.includes('kinetic') && String(slot.text).split(/\s+/).length >= 2 && dials.text >= 0.4) ? 'kinetic' : undefined, shotId: shot.id });
+  shotPlans.forEach(({ shot, plan, name: tplName }) => {
+    for (const slot of plan.textSlots || []) items.push({ kind: slot.kind, text: slot.text, at: shot.start + slot.at, dur: slot.dur, target: slot.target, id: undefined, required: (tplName === 'DARK_TITLE' && slot.kind === 'TITLE') || (tplName === 'END_CARD' && slot.kind === 'END_CARD'), animation: (shot.isFirst && wantIntro && et.typography.animations.includes('kinetic') && String(slot.text).split(/\s+/).length >= 2 && dials.text >= 0.4) ? 'kinetic' : undefined, shotId: shot.id });
   });
   if (et.typography.style === 'rhythmic' && dials.text >= 0.35 && textBank.length) {
     for (const d of [...(map.drops || []), ...(map.impacts || []).filter((i) => (i.strength ?? 0) >= 0.85 && i.kind !== 'drop')].sort((a, b) => a.t - b.t).slice(0, 4)) {
@@ -169,9 +169,10 @@ export function directTimeline(input) {
       items.push({ kind: 'KEYWORD', text: kw, at: d.t, dur: 0.7, shotId: shot.id });
     }
   }
-  const planned = planText(items, { comp, editType: et, dials, seed, snap: (t) => snapToGrid(map, t, 'half', 0.06), fps });
-  for (const d of planned.dropped) warnings.push(`text "${d.item.text}" dropped: ${d.reason}`);
-  planned.items.forEach((it, i) => { it.id = `T${pad(i + 1)}`; });
+  const captionsOn = Boolean(directive.flags.captions) && Boolean(narration);
+  const planned = planText(items, { comp, editType: et, dials, seed, snap: (t) => snapToGrid(map, t, 'half', 0.06), fps, shots: shots.map((s) => ({ id: s.id, start: s.start, end: s.end })), avoid: captionsOn ? [captionZone(comp)] : [] });
+  for (const d of planned.dropped) warnings.push(`text "${d.item.text}" dropped: ${d.reason}${d.item.required ? ' (REQUIRED - this is a bug in the plan)' : ''}`);
+  for (const r of items.filter((i) => i.required)) if (!planned.items.some((p) => p.required && p.shotId === r.shotId && p.kind === r.kind)) warnings.push(`${r.kind} "${r.text}" is required by the plan but could not be placed`);
 
   // ---- sound ----
   const finalShots = shotPlans.map(({ shot, name, plan }) => ({ ...shot, template: name, overlays: plan.overlays || [], velocity: plan.layers.find((l) => l.remap)?.remap || null }));
@@ -197,7 +198,7 @@ export function directTimeline(input) {
         id: shot.id, start: shot.start, end: shot.end, template: name, role: shot.role, energy: shot.energy, section: shot.section,
         assets: { main: plan.layers.find((l) => l.kind === 'footage')?.asset ?? null },
         layers: plan.layers, overlays: plan.overlays || [], camera: plan.camera ? { rig: plan.camera.rig, move: plan.camera.move, family: plan.camera.family, description: plan.camera.description, amount: plan.camera.amount } : null,
-        velocityHint: plan.velocityHint || null, fadeOut: plan.fadeOut || 0, notes: plan.notes || [], impacts: shot.impacts, text: planned.items.filter((it) => it.at >= shot.start - 1e-6 && it.at < shot.end - 1e-6),
+        velocityHint: plan.velocityHint || null, fadeOut: plan.fadeOut || 0, notes: plan.notes || [], impacts: shot.impacts, text: planned.items.filter((it) => it.shotId === shot.id),
       })),
       transitions: transitions.map(({ index, from, to, type, family, effectId, cut, d, dir, strength, window, outAt, overlayAsset, motion, sfx, notes }) => ({ index, from, to, type, family, effectId, cut, d, dir, strength, window, outAt, overlayAsset, motion, sfx, notes })),
     },

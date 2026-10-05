@@ -84,6 +84,7 @@ xoxo edit --assets DIR --type T --prompt "…" [--output DIR --quality draft|pre
 xoxo direct [project]    xoxo beats AUDIO    xoxo library init|scan|starter|search "fast transition"
 xoxo critique [project]    xoxo promote PROJECT --to final    xoxo memory show|like|dislike|reset
 xoxo benchmark velocity|cinematic|documentary|commercial|all [--dry-run]
+xoxo project status|save|close     # what's open in After Effects, who owns it; --discard only when YOU want a foreign unsaved project dropped
 ```
 Claude Code also gets the same capabilities as MCP tools (`xoxo_*`, see [docs/MCP.md](docs/MCP.md)).
 

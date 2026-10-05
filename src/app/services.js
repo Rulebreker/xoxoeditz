@@ -20,10 +20,11 @@ import { scaffoldPlan } from '../plan/scaffold.js';
 import { validatePlan, normalizePlan, masterEnd } from '../plan/schema.js';
 import { buildProject, refreshHostCapabilities, prepareSfx } from '../ae/build.js';
 import { compilePlan } from '../ae/compile.js';
+import { openProject, projectState, closeProject, saveOpenProject } from '../ae/project.js';
 import { compileTimeline } from '../ae/compile-timeline.js';
 import { isTimelinePlan, validateTimeline, normalizeTimeline } from '../timeline/plan.js';
 import { runQa } from '../qa/checks.js';
-import { repairIssues } from '../qa/repair.js';
+import { repairIssues, issueKey } from '../qa/repair.js';
 import { renderProject } from '../render/index.js';
 import { describeCapabilities } from '../effects/registry.js';
 import { isAeRunning } from '../detect/tools.js';
@@ -362,21 +363,32 @@ async function reconstructBuild(ctx, prj, caps) {
   return { plan, build: compilePlan(plan, { manifest: sfx.manifest, narration: prj.narration, caps, sfxCues: sfx.cues }), manifest: sfx.manifest };
 }
 
-export async function runVerify(ctx, { bridge, caps, prj, plan, build, manifest, report, repair = true, outputPath, dryRun = false }) {
+/**
+ * QA with VERIFIED repair: check -> repair -> re-inspect the real project state -> check again -> (stronger repair) ->
+ * ... up to `maxRounds`. A repair only counts as successful when the re-inspection proves the QA condition is gone
+ * (`verified: true`); an applied-but-ineffective repair is reported as such and the issue stays in the report.
+ */
+export async function runVerify(ctx, { bridge, caps, prj, plan, build, manifest, report, repair = true, outputPath, dryRun = false, fullBuild = null, maxRounds = 3 }) {
   const t = await inspectProject(bridge);
   if (!t.success) return fail('verify', `could not inspect the project: ${t.error}`, { code: t.code });
   const qaCtx = (inspect) => ({ plan, manifest, narration: prj.narration, inspect, build, report, caps, config: ctx.config, outputPath, dryRun });
   let qa = runQa(qaCtx(t.data));
-  let repairs = [];
-  if (repair && !qa.passed || (repair && qa.warnings.some((w) => w.repairable))) {
-    repairs = await repairIssues(bridge, qa, { plan, build, narration: prj.narration, manifest, logger: ctx.logger });
-    if (repairs.length) {
-      const again = await inspectProject(bridge);
-      if (again.success) qa = runQa(qaCtx(again.data));
-    }
+  const repairs = [];
+  const wantsRepair = (q) => q.errors.concat(q.warnings).some((i) => i.repairable);
+  for (let round = 1; repair && round <= maxRounds && wantsRepair(qa); round++) {
+    const before = new Set(qa.errors.concat(qa.warnings).map(issueKey));
+    const actions = await repairIssues(bridge, qa, { plan, build, narration: prj.narration, manifest, logger: ctx.logger, attempt: round, fullBuild: fullBuild || (() => build) });
+    if (!actions.length) break;
+    const again = await inspectProject(bridge);
+    if (!again.success) { for (const a of actions) repairs.push({ ...a, verified: false, note: 're-inspection failed' }); break; }
+    qa = runQa(qaCtx(again.data));
+    const after = new Set(qa.errors.concat(qa.warnings).map(issueKey));
+    for (const a of actions) repairs.push({ ...a, verified: a.success && before.has(a.key) && !after.has(a.key) });
   }
   qa.repairs = repairs;
   qa.dryRun = dryRun;
+  const unverified = repairs.filter((r) => !r.verified && qa.errors.concat(qa.warnings).some((i) => issueKey(i) === r.key));
+  if (unverified.length) qa.warnings.push({ check: 'PROJECT_CHECK', code: 'REPAIR_NOT_VERIFIED', severity: 'warning', message: `${unverified.length} repair(s) were applied but re-inspection shows the problem is still there: ${[...new Set(unverified.map((r) => r.key))].slice(0, 5).join(', ')}` });
   if (repairs.some((r) => r.success)) { // repairs live in the open project: persist them
     const saved = await bridge.call('project_save', { path: prj.paths.aep.replace(/\\/g, '/') });
     if (!saved.success) qa.warnings.push({ check: 'PROJECT_CHECK', code: 'SAVE_AFTER_REPAIR_FAILED', severity: 'warning', message: `repairs were applied but the project could not be saved: ${saved.error}` });
@@ -385,7 +397,7 @@ export async function runVerify(ctx, { bridge, caps, prj, plan, build, manifest,
   return { success: qa.passed, operation: 'verify', data: { passed: qa.passed, summary: qa.summary, errors: qa.errors, warnings: qa.warnings.slice(0, 40), fallbacks_used: qa.fallbacks_used, repairs, report: prj.paths.qa }, ...(qa.passed ? {} : { error: `QA failed: ${qa.summary}`, recoverable: true }) };
 }
 
-export function editProject(ctx, name, { dryRun = false, verify = true, repair = true, onProgress } = {}) {
+export function editProject(ctx, name, { dryRun = false, verify = true, repair = true, onProgress, discard = false } = {}) {
   return attempt('edit', async () => {
     const n = resolveProjectName(ctx, name);
     const prj = loadProject(ctx, n, { dryRun });
@@ -394,11 +406,11 @@ export function editProject(ctx, name, { dryRun = false, verify = true, repair =
     ensureDir(prj.paths.root); ensureDir(path.dirname(prj.paths.aep));
     const { bridge, caps, mock } = await openBridge(ctx, { dryRun });
     try {
-      const built = await buildProject({ config: ctx.config, bridge, caps, plan: prj.plan, manifest: prj.manifest, library: prj.library, narration: prj.narration, paths: prj.paths, logger: ctx.logger, onProgress });
+      const built = await buildProject({ config: ctx.config, bridge, caps, plan: prj.plan, manifest: prj.manifest, library: prj.library, narration: prj.narration, paths: prj.paths, logger: ctx.logger, onProgress, discard });
       if (built.error && !built._build) return built; // invalid plan / cannot open project
       const out = { build: { success: built.success, summary: built.data?.summary, errors: built.data?.errors, fallbacksUsed: built.data?.fallbacksUsed, degraded: built.data?.degraded, project: prj.paths.aep, checkpoint: built.data?.checkpoint, transport: bridge.transportName, notes: built.data?.compiled?.notes, report: prj.paths.buildReport }, dryRun: mock };
       if (verify) {
-        const v = await runVerify(ctx, { bridge, caps: built._caps, prj, plan: built._plan, build: built._build, manifest: built._manifest, report: built.data, repair, outputPath: path.join(prj.paths.renders, 'x.mp4'), dryRun: mock });
+        const v = await runVerify(ctx, { bridge, caps: built._caps, prj, plan: built._plan, build: built._build, manifest: built._manifest, report: built.data, repair, outputPath: path.join(prj.paths.renders, 'x.mp4'), dryRun: mock, fullBuild: built._full });
         out.qa = v.data ?? { passed: false, error: v.error };
         if (v.success !== undefined) out.qaPassed = v.success;
       }
@@ -408,7 +420,7 @@ export function editProject(ctx, name, { dryRun = false, verify = true, repair =
   });
 }
 
-export function verifyProject(ctx, name, { dryRun = false, repair = true } = {}) {
+export function verifyProject(ctx, name, { dryRun = false, repair = true, discard = false } = {}) {
   return attempt('verify', async () => {
     const n = resolveProjectName(ctx, name);
     const prj = loadProject(ctx, n, { dryRun });
@@ -419,12 +431,8 @@ export function verifyProject(ctx, name, { dryRun = false, repair = true } = {})
       const { plan, build, manifest } = await reconstructBuild(ctx, prj, info.caps);
       const report = readJson(prj.paths.buildReport, null);
       if (!dryRun) {
-        const open = await bridge.call('project_info');
-        if (!open.success) return open;
-        if (!open.data.file || path.resolve(open.data.file) !== path.resolve(prj.paths.aep)) {
-          const o = await bridge.call('project_open', { path: prj.paths.aep.replace(/\\/g, '/') });
-          if (!o.success) return fail('verify', `could not open ${prj.paths.aep}: ${o.error}`);
-        }
+        const o = await openProject(bridge, prj.paths.aep, { discard, projectsDir: ctx.config.projectsDir, dirtyPolicy: ctx.config.dirtyXoxoPolicy });
+        if (!o.success) return fail('verify', `could not open ${prj.paths.aep}: ${o.error}`, { code: o.code, recoverable: true });
       }
       return await runVerify(ctx, { bridge, caps: info.caps, prj, plan, build, manifest, report, repair, outputPath: path.join(prj.paths.renders, 'x.mp4'), dryRun });
     } finally { await bridge.close(); }
@@ -444,12 +452,8 @@ export function renderProjectCmd(ctx, name, opts = {}) {
     const caps = await getCapabilities(ctx);
     const { bridge } = await openBridge(ctx);
     try {
-      const open = await bridge.call('project_info');
-      if (!open.success) return open;
-      if (!open.data.file || path.resolve(open.data.file) !== path.resolve(prj.paths.aep)) {
-        const o = await bridge.call('project_open', { path: prj.paths.aep.replace(/\\/g, '/') });
-        if (!o.success) return fail('render', `could not open ${prj.paths.aep}: ${o.error}`);
-      }
+      const o = await openProject(bridge, prj.paths.aep, { discard: Boolean(opts.discard), projectsDir: ctx.config.projectsDir, dirtyPolicy: ctx.config.dirtyXoxoPolicy });
+      if (!o.success) return fail('render', `could not open ${prj.paths.aep}: ${o.error}`, { code: o.code, recoverable: true });
       const range = opts.range ? opts.range.split(':').map(Number) : null;
       const r = await renderProject({ config: ctx.config, bridge, caps, plan, paths: prj.paths, preview: Boolean(opts.preview), range, onProgress: opts.onProgress, logger: ctx.logger, preferAme: Boolean(opts.ame), keepIntermediate: Boolean(opts.keepIntermediate) });
       if (r.success) writeJson(prj.paths.lastRender, { at: new Date().toISOString(), preview: Boolean(opts.preview), ...r.data });
@@ -481,3 +485,34 @@ export function statusProject(ctx, name) {
 }
 
 export { findAfterEffects, mergeHostInfo };
+
+// ---------------- After Effects project state ----------------
+/** `xoxo project status`: what is open in After Effects, who owns it, and what a build would do about it. */
+export function projectStatusCmd(ctx, { dryRun = false } = {}) {
+  return attempt('project_status', async () => {
+    const { bridge, mock } = await openBridge(ctx, { dryRun });
+    try {
+      const st = await projectState(bridge, { projectsDir: ctx.config.projectsDir });
+      if (!st.success) return st;
+      const s = st.data;
+      const next = s.kind === 'none' ? 'nothing is open: a build will create or open its own project'
+        : s.kind === 'xoxo' ? (s.dirty ? `an XOXOEDITZ project with unsaved changes: a build will ${ctx.config.dirtyXoxoPolicy === 'discard' ? 'discard them' : 'save it'} before switching` : 'an XOXOEDITZ project without unsaved changes: a build will switch away from it safely')
+          : s.dirty ? 'somebody else\'s project with UNSAVED CHANGES: a build will refuse (save/close it, or pass --discard on purpose)' : 'somebody else\'s project without unsaved changes: a build will close it (nothing is lost) and open its own';
+      return { success: true, operation: 'project_status', data: { ...s, willDo: next, policy: ctx.config.dirtyXoxoPolicy || 'save', simulator: mock } };
+    } finally { await bridge.close(); }
+  });
+}
+
+export function projectCloseCmd(ctx, { save = false, discard = false, dryRun = false } = {}) {
+  return attempt('project_close', async () => {
+    const { bridge } = await openBridge(ctx, { dryRun });
+    try { return await closeProject(bridge, { save, discard, projectsDir: ctx.config.projectsDir }); } finally { await bridge.close(); }
+  });
+}
+
+export function projectSaveCmd(ctx, { as = null, dryRun = false } = {}) {
+  return attempt('project_save', async () => {
+    const { bridge } = await openBridge(ctx, { dryRun });
+    try { return await saveOpenProject(bridge, { as, projectsDir: ctx.config.projectsDir }); } finally { await bridge.close(); }
+  });
+}

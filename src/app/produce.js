@@ -154,7 +154,7 @@ export function produceVideo(ctx, opts = {}) {
     log(`directed [${quality}]: ${dir.data.shots} shots, ${dir.data.duration}s @ ${Math.round(dir.data.bpm)} BPM (${Object.entries(dir.data.templates).map(([k, v]) => `${k}×${v}`).join(', ')})`);
 
     // 4. build + QA + repair
-    const edit = await S.editProject(ctx, name, { dryRun: Boolean(opts.dryRun), verify: opts.verify !== false, repair: opts.repair !== false, onProgress: (e) => { if (e.status === 'start') log(`build: ${e.label}`); } });
+    const edit = await S.editProject(ctx, name, { dryRun: Boolean(opts.dryRun), verify: opts.verify !== false, repair: opts.repair !== false, discard: Boolean(opts.discard), onProgress: (e) => { if (e.status === 'start') log(`build: ${e.label}`); } });
     log(`build: ${edit.success ? 'ok' : 'FAILED'}${edit.data?.qa ? `; QA ${edit.data.qa.passed ? 'passed' : 'FAILED'} (${edit.data.qa.summary})` : ''}`);
 
     // 5. render (never for a dry run / simulator: nothing exists to render)

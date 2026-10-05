@@ -24,6 +24,71 @@ XOXO.op("project_info", function (a) {
   return { file: f, dirty: !!app.project.dirty, numItems: app.project.numItems, comps: comps };
 });
 
+// ---- project ownership -----------------------------------------------------------------------------------------
+// A project XOXOEDITZ created carries a marker: a root folder item "XOXO_META" whose comment reads
+// "XOXOEDITZ|v=1|project=<name>". It is saved inside the .aep, so it survives closing and re-opening and lets later
+// runs tell a generated project from somebody's own work without guessing from file names.
+XOXO.OWNER_FOLDER = "XOXO_META";
+XOXO.OWNER_TAG = "XOXOEDITZ";
+
+XOXO.readOwner = function () {
+  var found = null;
+  try {
+    var root = app.project.rootFolder;
+    for (var i = 1; i <= root.numItems; i++) {
+      var it = root.item(i);
+      if (it instanceof FolderItem && it.name === XOXO.OWNER_FOLDER) { found = it; break; }
+    }
+  } catch (e) { return null; }
+  if (!found) return null;
+  var c = String(found.comment || "");
+  if (c.indexOf(XOXO.OWNER_TAG + "|") !== 0) return null;
+  var parts = c.split("|");
+  var m = {};
+  for (var k = 1; k < parts.length; k++) {
+    var eq = parts[k].indexOf("=");
+    if (eq > 0) m[parts[k].substr(0, eq)] = parts[k].substr(eq + 1);
+  }
+  return m;
+};
+
+// Read-only: what is open in After Effects right now, and who does it belong to.
+XOXO.op("project_status", function (a) {
+  var f = null;
+  try { f = app.project.file ? app.project.file.fsName : null; } catch (e) { f = null; }
+  var comps = [];
+  XOXO.eachItem(function (it) { if (it instanceof CompItem) comps.push(it.name); });
+  return { open: (app.project.numItems > 0 || !!f), file: f, untitled: !f, dirty: !!app.project.dirty, numItems: app.project.numItems, comps: comps, owner: XOXO.readOwner() };
+});
+
+// Mark the open project as XOXOEDITZ's own (idempotent). The caller saves afterwards.
+XOXO.op("project_mark", function (a) {
+  XOXO.need(a, ["project"]);
+  var root = app.project.rootFolder;
+  var folder = null;
+  for (var i = 1; i <= root.numItems; i++) {
+    var it = root.item(i);
+    if (it instanceof FolderItem && it.name === XOXO.OWNER_FOLDER) { folder = it; break; }
+  }
+  if (!folder) folder = app.project.items.addFolder(XOXO.OWNER_FOLDER);
+  folder.comment = XOXO.OWNER_TAG + "|v=1|project=" + String(a.project).replace(/[|=]/g, "_");
+  return { marked: true, project: a.project };
+});
+
+// Close the open project. save:true saves first (needs a file); otherwise the changes are discarded. Callers decide
+// WHETHER that is allowed (see src/ae/project.js); this op only does it.
+XOXO.op("project_close", function (a) {
+  var f = null;
+  try { f = app.project.file ? app.project.file.fsName : null; } catch (e) { f = null; }
+  if (a.save) {
+    if (!f) throw XOXO.err("the open project has never been saved; pass a path to project_save first", "NO_PROJECT_FILE", true);
+    app.project.close(CloseOptions.SAVE_CHANGES);
+  } else {
+    app.project.close(CloseOptions.DO_NOT_SAVE_CHANGES);
+  }
+  return { closed: true, file: f, saved: !!a.save };
+});
+
 XOXO.op("project_new", function (a) {
   if (app.project.dirty && !a.discard) {
     throw XOXO.err("current project has unsaved changes; save it or pass discard:true", "PROJECT_DIRTY", true);

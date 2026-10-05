@@ -57,7 +57,7 @@ export async function prepareSfx(config, plan, manifest, generatedDir, { synth =
 /**
  * Whole edit: validate -> capabilities -> sound design -> compile -> open project -> execute -> checkpoint.
  */
-export async function buildProject({ config, bridge, caps, plan: rawPlan, manifest, library = null, narration, paths, logger = nullLogger, onProgress, synthSfx = true, incremental = true }) {
+export async function buildProject({ config, bridge, caps, plan: rawPlan, manifest, library = null, narration, paths, logger = nullLogger, onProgress, synthSfx = true, incremental = true, discard = false }) {
   const timeline = isTimelinePlan(rawPlan);
   const v = timeline ? validateTimeline(rawPlan, { manifest, library }) : validatePlan(rawPlan, { manifest, narration });
   if (!v.valid) return fail('edit', `plan is invalid:\n${v.errors.map((e) => `  - ${e.path}: ${e.message}`).join('\n')}`, { recoverable: true, code: 'PLAN_INVALID', data: v });
@@ -81,7 +81,7 @@ export async function buildProject({ config, bridge, caps, plan: rawPlan, manife
   build.meta.notes.push(...sfx.notes);
   logger.info('compiled', { stages: build.stages.length, ops: countOps(build) });
 
-  const opened = await openOrCreateProject(bridge, paths.aep);
+  const opened = await openOrCreateProject(bridge, paths.aep, { discard, projectsDir: config.projectsDir, name: path.basename(paths.root), dirtyPolicy: config.dirtyXoxoPolicy || 'save' });
   if (!opened.success) return { ...opened, operation: 'edit' };
 
   const report = await executeBuild(bridge, build, { logger, onProgress });
@@ -93,12 +93,12 @@ export async function buildProject({ config, bridge, caps, plan: rawPlan, manife
   } else if (timeline) { try { fs.rmSync(paths.buildState, { force: true }); } catch { /* */ } } // a failed build must not be treated as a base for the next incremental one
 
   const full = {
-    ...report, project: paths.aep, checkpoint: cp.data?.file || null, transport: bridge.transportName,
+    ...report, projectState: opened.data.prepare || null, project: paths.aep, checkpoint: cp.data?.file || null, transport: bridge.transportName,
     ae: opened.data.ae, hostProblems: hostCaps.problems, compiled: { master: build.meta.master, scenes: timeline ? plan.timeline.shots.length : build.meta.sceneComps.length, reusedUnits: build.meta.reused?.length || 0, incremental: Boolean(build.meta.incremental), duration: build.meta.duration, style: build.meta.style, notes: build.meta.notes, assetsUsed: build.meta.assetsUsed },
     validationWarnings: v.warnings,
   };
   ensureDir(paths.root);
   writeJson(paths.buildReport, full);
   writeJson(paths.compiled, { plan, meta: build.meta });
-  return { success: report.success, operation: 'edit', data: full, ...(report.success ? {} : { error: `${report.errors.length} required step(s) failed: ${report.errors.slice(0, 3).map((e) => `${e.label}: ${e.message}`).join(' | ')}`, recoverable: true }), _build: build, _plan: plan, _caps: hostCaps.caps, _manifest: timeline ? { ...manifest, assets: [...manifest.assets, ...(library?.assets || [])] } : sfx.manifest };
+  return { success: report.success, operation: 'edit', data: full, ...(report.success ? {} : { error: `${report.errors.length} required step(s) failed: ${report.errors.slice(0, 3).map((e) => `${e.label}: ${e.message}`).join(' | ')}`, recoverable: true }), _build: build, _full: () => (timeline ? compileTimeline(plan, { manifest, library, narration, caps: hostCaps.caps, previous: null }) : build), _plan: plan, _caps: hostCaps.caps, _manifest: timeline ? { ...manifest, assets: [...manifest.assets, ...(library?.assets || [])] } : sfx.manifest };
 }

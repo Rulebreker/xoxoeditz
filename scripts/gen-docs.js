@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { EDIT_TYPES } from '../src/edit-types/index.js';
 import { REGISTRY } from '../src/effects/registry.js';
 import { TEMPLATES } from '../src/compositing/templates.js';
-import { TEXT_KINDS } from '../src/typography/engine.js';
+import { TEXT_KINDS, ROLE_ABBR, HEADLINE_ROLES, REQUIRED_ROLES, SAFE_AREA } from '../src/typography/engine.js';
 import { RIGS } from '../src/camera/rigs.js';
 import { VELOCITY_PROFILES } from '../src/velocity/profiles.js';
 import { LOOKS } from '../src/color/looks.js';
@@ -66,9 +66,26 @@ ${table(['Type', 'Family', 'Sound role', 'Min shot (s)', 'Moves the camera?'], O
 
 ${table(['Template', 'Implemented', 'Needs', 'What it is'], Object.entries(TEMPLATES).map(([k, t]) => [`**${k}**`, t.implemented ? 'yes' : '**no (TODO)**', [t.assets ? `${t.assets} asset` : 'no asset', t.needsSubject && 'a detected subject', t.needsText && 'text', t.needsStat && 'a stat', t.needsCallout && 'callout text', t.wantsSecond && 'a second asset (optional)', t.minDur && `≥ ${t.minDur}s`].filter(Boolean).join(', '), t.doc]))}
 
-## Text kinds
+## Text kinds (= semantic roles)
 
-${table(['Kind', 'Size (× frame height)', 'Default anchor', 'Max words', 'Case', 'Animations it may use'], Object.entries(TEXT_KINDS).map(([k, t]) => [k, t.size, t.pos.join(', '), t.maxWords, t.caseMode, t.anims.join(', ')]))}
+${table(['Kind', 'Layer id', 'Size (× frame height)', 'Default anchor', 'Max words', 'Case', 'Animations it may use'], Object.entries(TEXT_KINDS).map(([k, t]) => [k, `TXT_${ROLE_ABBR[k]}_01`, t.size, t.pos.join(', '), t.maxWords, t.caseMode, t.anims.join(', ')]))}
+
+**Layout engine.** Text is placed inside the safe area (left ${SAFE_AREA.left * 100}%, right ${SAFE_AREA.right * 100}%, top ${SAFE_AREA.top * 100}%, bottom ${SAFE_AREA.bottom * 100}% of the frame) and out of the caption band. The Node side
+estimates (wrap first, shrink only when the line budget is used up); the host op \`text_fit\` then repeats the job with
+**measured** bounds (\`sourceRectAtTime\` at the layer's rest time): re-wrap into 1..N balanced lines, shrink the font in 6 % steps (never
+layer scale), align and clamp into the box. QA measures at the same rest time, never at comp time 0. Upper-casing is done on the string -
+\`TextDocument.allCaps\` is read-only in After Effects 2026 and is never written.
+
+**Intervals and ids.** Every text item has an explicit \`start\`, \`end\`, \`duration\`, \`shotId\`/\`sceneId\`, \`role\` and a deterministic id
+(\`TXT_<ROLE>_<nn>\`, numbered per role in time order, never derived from the display text). The interval lies inside the item's shot;
+animation keyframes lie inside the interval (animation never changes *when* text is visible); transitions do not touch text.
+
+**Overlap rules.** Headline roles (${HEADLINE_ROLES.join(', ')}) are mutually exclusive in time. Other roles may share the frame only in separate
+areas: TITLE + SUBTITLE / LOWER_THIRD / CAPTION / HUD / LABEL / CALLOUT, END_CARD + SUBTITLE / CAPTION / HUD / LOWER_THIRD,
+LOWER_THIRD + CAPTION / CALLOUT / HUD, CALLOUT + HUD / CAPTION, HUD + HUD, and so on (\`textMayCoexist\` in \`src/typography/engine.js\`).
+Two titles, a title and an end card, or a title and a keyword at once are an unintentional overlap (QA error \`TEXT_OVERLAP\`;
+\`allowOverlap: true\` on an item is the explicit opt-out). **Required** roles (${REQUIRED_ROLES.join(', ')} when the Director asked for them) are built
+as required units: they have extra fallback animations, end in a plain static layer, and fail the build loudly instead of being dropped.
 
 ## Camera rigs
 

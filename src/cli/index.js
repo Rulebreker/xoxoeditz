@@ -35,6 +35,7 @@ ${bold('Everyday workflow')}
   xoxo memory [show|reset|like <id>|dislike <id>]         local taste memory (ids and counts only)
   xoxo beats <audio> [--out beat_map.json]                 BPM, beats, downbeats, drops, breaks, rises, impacts, sections
   xoxo edit [name] [--dry-run]       build the project in After Effects from plan.json (+ QA + auto-repair)
+         [--discard]                 ONLY if After Effects holds somebody else's unsaved project and you want it thrown away; never implied
   xoxo verify [name]                 re-run QA on the saved project
   xoxo render [name] [--preview --range 10:20]
   xoxo status [name]
@@ -48,6 +49,9 @@ ${bold('Setup & tools')}
   xoxo effects                       effect fallback chains for this machine
   xoxo library init [dir] | scan | starter [dir] | search <query>   universal asset library (SFX, music, overlays, ...)
   xoxo project init <dir>            create INPUT/AUDIO/OUTPUT/CACHE/REPORTS anywhere
+  xoxo project status                what is open in After Effects, who owns it, what a build would do about it
+  xoxo project save [--as f.aep]     save the open project (explicit command)
+  xoxo project close [--save|--discard]   close it; somebody else's unsaved project needs an explicit choice
   xoxo bridge install|ping|stop|ops|installed|uninstall|call <op> [json]
   xoxo sfx <whoosh|impact|riser|tick> [--out file]
   xoxo selftest [--dry-run]          end-to-end smoke test with generated media
@@ -63,7 +67,7 @@ const OPTIONS = {
   audio: { type: 'string' }, script: { type: 'string' }, subtitles: { type: 'string' }, transcribe: { type: 'boolean' }, 'noise-db': { type: 'string' },
   scaffold: { type: 'boolean' }, validate: { type: 'boolean' }, show: { type: 'boolean' }, force: { type: 'boolean' }, 'also-in-library': { type: 'boolean' }, limit: { type: 'string' }, type: { type: 'string' },
   title: { type: 'string' }, brief: { type: 'string' }, style: { type: 'string' }, resolution: { type: 'string' }, aspect: { type: 'string' }, fps: { type: 'string' }, 'no-captions': { type: 'boolean' }, captions: { type: 'boolean' },
-  'no-verify': { type: 'boolean' }, 'no-repair': { type: 'boolean' }, 'no-render': { type: 'boolean' },
+  'no-verify': { type: 'boolean' }, 'no-repair': { type: 'boolean' }, 'no-render': { type: 'boolean' }, discard: { type: 'boolean' }, save: { type: 'boolean' }, as: { type: 'string' },
   preview: { type: 'boolean' }, range: { type: 'string' }, ame: { type: 'boolean' }, 'keep-intermediate': { type: 'boolean' },
   target: { type: 'string' }, out: { type: 'string' }, verbose: { type: 'boolean', short: 'v' },
   prompt: { type: 'string' }, output: { type: 'string' }, seed: { type: 'string' }, quality: { type: 'string' }, duration: { type: 'string' }, professional: { type: 'boolean' },
@@ -150,10 +154,10 @@ export async function main(argv) {
           const num = (v) => (v === undefined ? undefined : Number(v));
           const overrides = parseSet(o.set);
           if (overrides.error) { console.error(red(overrides.error)); return 2; }
-          const r = await produceVideo(ctx, { assets: o.assets, type: o.type, prompt: o.prompt, output: o.output, config: o.config, name: o.name, seed: num(o.seed), quality: o.quality, duration: num(o.duration), professional: o.professional || undefined, music: o.music === 'off' ? false : o.music, sfx: o.sfx === 'off' ? false : o.sfx, intensity: num(o.intensity), overrides: overrides.values, style: o.style, title: o.title, resolution: o.resolution, aspect: o.aspect, fps: num(o.fps), captions: o.captions ? true : undefined, dryRun: o['dry-run'], render: !o['no-render'], verify: !o['no-verify'], repair: !o['no-repair'], starterSfx: o['starter-sfx'], force: o.force, remember: o.remember, onProgress: o.json ? undefined : (e) => process.stderr.write(dim(`  → ${e.message}\n`)) });
+          const r = await produceVideo(ctx, { discard: o.discard || undefined, assets: o.assets, type: o.type, prompt: o.prompt, output: o.output, config: o.config, name: o.name, seed: num(o.seed), quality: o.quality, duration: num(o.duration), professional: o.professional || undefined, music: o.music === 'off' ? false : o.music, sfx: o.sfx === 'off' ? false : o.sfx, intensity: num(o.intensity), overrides: overrides.values, style: o.style, title: o.title, resolution: o.resolution, aspect: o.aspect, fps: num(o.fps), captions: o.captions ? true : undefined, dryRun: o['dry-run'], render: !o['no-render'], verify: !o['no-verify'], repair: !o['no-repair'], starterSfx: o['starter-sfx'], force: o.force, remember: o.remember, onProgress: o.json ? undefined : (e) => process.stderr.write(dim(`  → ${e.message}\n`)) });
           return emit(o, r, formatProduce);
         }
-        const r = await S.editProject(ctx, name, { dryRun: o['dry-run'], verify: !o['no-verify'], repair: !o['no-repair'], onProgress: progress });
+        const r = await S.editProject(ctx, name, { dryRun: o['dry-run'], verify: !o['no-verify'], repair: !o['no-repair'], discard: o.discard, onProgress: progress });
         return emit(o, r, formatEdit);
       }
       case 'direct': return emit(o, await directProject(ctx, name, { type: o.type, prompt: o.prompt, seed: o.seed === undefined ? undefined : Number(o.seed), duration: o.duration === undefined ? undefined : Number(o.duration), professional: o.professional || undefined, dryRun: o['dry-run'], starterSfx: o['starter-sfx'], log: o.json ? undefined : (m) => process.stderr.write(dim(`  → ${m}\n`)) }), (d) => `${green('✓')} ${d.shots} shots, ${d.duration}s @ ${Math.round(d.bpm)} BPM (${d.editType})  -> ${d.plan}\n  templates: ${Object.entries(d.templates).map(([k, v]) => `${k}×${v}`).join(', ')}\n${(d.warnings || []).map((w) => '  ' + red('!') + ' ' + w).join('\n')}`);
@@ -172,7 +176,7 @@ export async function main(argv) {
         if (!name) { console.error('usage: xoxo beats <audio file> [--out beat_map.json]'); return 2; }
         return emit(o, await beatsFor(ctx, name, { out: o.out }), (d) => `${green('✓')} ${d.bpm} BPM (confidence ${d.confidence}), ${d.beats} beats, ${d.downbeats} downbeats, ${d.bars} bars\n  drops: ${d.drops.map((x) => x.t.toFixed(2) + 's').join(', ') || 'none'}   breaks: ${d.breaks.map((x) => x.start.toFixed(1) + '–' + x.end.toFixed(1) + 's').join(', ') || 'none'}   rises: ${d.rises.map((x) => x.start.toFixed(1) + '→' + x.end.toFixed(1) + 's').join(', ') || 'none'}\n  sections: ${d.sections.map((x) => `${x.kind} ${x.start.toFixed(1)}–${x.end.toFixed(1)}s`).join(' | ')}${d.out ? '\n  saved: ' + d.out : ''}`);
       }
-      case 'verify': return emit(o, await S.verifyProject(ctx, name, { dryRun: o['dry-run'], repair: !o['no-repair'] }), (d) => formatQa({ ...d, passed: d.passed }));
+      case 'verify': return emit(o, await S.verifyProject(ctx, name, { dryRun: o['dry-run'], repair: !o['no-repair'], discard: o.discard }), (d) => formatQa({ ...d, passed: d.passed }));
       case 'render': {
         const progress = o.json ? undefined : (() => { let last = 0; return (p) => { if (p.phase === 'render' && Date.now() - last > 2000) { last = Date.now(); process.stderr.write(dim(`  rendering frame ${p.frame}/${p.of}\r`)); } else if (p.phase === 'transcode') process.stderr.write(dim('  transcoding…\n')); }; })();
         const r = await S.renderProjectCmd(ctx, name, { preview: o.preview, range: o.range, force: o.force, ame: o.ame, keepIntermediate: o['keep-intermediate'], onProgress: progress });
@@ -195,7 +199,10 @@ export async function main(argv) {
       }
       case 'project': {
         if (name === 'init' && pos[1]) return emit(o, await S.projectInit(ctx, pos[1]), (d) => `${green('✓')} ${d.root}\n${d.folders.map((f) => `  ${f.created ? '+' : '='} ${f.dir}`).join('\n')}`);
-        console.error('usage: xoxo project init <dir>'); return 2;
+        if (name === 'status') return emit(o, await S.projectStatusCmd(ctx, { dryRun: o['dry-run'] }), (d) => [`${d.kind === 'none' ? dim('•') : d.dirty ? red('!') : green('✓')} After Effects project: ${d.kind === 'none' ? 'none open' : `${d.file || '(untitled)'}`}`, ...(d.kind === 'none' ? [] : [`  owner:   ${d.kind === 'xoxo' ? 'XOXOEDITZ' : 'NOT XOXOEDITZ (yours)'} - ${d.reason}`, `  unsaved: ${d.dirty ? red('yes') : 'no'}`, `  items:   ${d.numItems}${d.comps?.length ? `, comps: ${d.comps.slice(0, 6).join(', ')}` : ''}`]), `  a build would: ${d.willDo}`, ...(d.simulator ? [dim('  (simulator: dry-run - not the real After Effects)')] : [])].join('\n'));
+        if (name === 'save') return emit(o, await S.projectSaveCmd(ctx, { as: o.as, dryRun: o['dry-run'] }), (d) => d.saved ? `${green('✓')} saved ${d.file}` : dim(d.note || 'nothing to save'));
+        if (name === 'close') return emit(o, await S.projectCloseCmd(ctx, { save: o.save, discard: o.discard, dryRun: o['dry-run'] }), (d) => d.closed ? `${green('✓')} closed ${d.file || '(untitled)'}${d.saved ? ' (saved first)' : d.discarded ? red(' (unsaved changes discarded)') : ''}` : dim(d.note || 'nothing to close'));
+        console.error('usage: xoxo project init <dir> | status | save [--as file.aep] | close [--save | --discard]'); return 2;
       }
       case 'auto': return await auto(ctx, o, pos);
       case 'selftest': return await selftest(ctx, o);
@@ -241,7 +248,7 @@ async function auto(ctx, o, pos) {
     const hasNarr = scan.data.assets.some((a) => a.role === 'narration');
     if (hasNarr) await step('narration analysis', S.analyzeProjectNarration(ctx, name, { script: o.script, subtitles: o.subtitles, transcribe: o.transcribe }));
     await step('plan (baseline director)', S.scaffoldProjectPlan(ctx, name, { title: o.title || name, brief: o.brief, style: o.style, resolution: o.resolution, aspect: o.aspect, fps: o.fps, force: true }));
-    const edit = await step('edit + QA', S.editProject(ctx, name, { dryRun: o['dry-run'], repair: !o['no-repair'] }), (r) => formatEdit(r.data || {}));
+    const edit = await step('edit + QA', S.editProject(ctx, name, { dryRun: o['dry-run'], repair: !o['no-repair'], discard: o.discard }), (r) => formatEdit(r.data || {}));
     if (!o.json) console.log(formatEdit(edit.data));
     if (o['dry-run'] || o['no-render']) { if (!o.json) console.log(dim('render skipped')); return 0; }
     const r = await step('render', S.renderProjectCmd(ctx, name, {}), formatRender);

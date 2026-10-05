@@ -9,6 +9,7 @@
 | `xoxo_new_project`, `xoxo_scan_assets`, `xoxo_analyze_narration` | project, asset manifest (+thumbnails), narration analysis |
 | `xoxo_scaffold_plan`, `xoxo_validate_plan`, `xoxo_plan_format` | baseline plan, validation, format reference |
 | `xoxo_edit`, `xoxo_verify`, `xoxo_render`, `xoxo_status` | build + QA, QA only, render + verify, pipeline status |
+| `xoxo_project` | After Effects project state: `status` (who owns the open project, is it unsaved, what a build would do), `save`, `close` (`save`/`discard` are explicit) |
 | `xoxo_ae_call`, `xoxo_ae_ops` | low-level host operations and their reference |
 | `xoxo_produce` | **autonomous edit**: assets + type + prompt → scan, beats, Director, build, QA, render, report |
 | `xoxo_direct`, `xoxo_beats` | re-run only the Director (another seed = another cut); analyse any track |
@@ -21,3 +22,8 @@ keeps one simulator instance per process so repeated `dryRun` calls behave like 
 protocol only; logs go to `.xoxo/logs/`. Tools run sequentially because After Effects is single-threaded.
 
 Manual test: `printf '{"jsonrpc":"2.0","id":1,"method":"tools/list"}\n' | node bin/xoxo.js mcp`.
+
+**Project safety.** A build never discards somebody else's unsaved After Effects project. `xoxo_edit` / `xoxo_produce` accept
+`discard: true` **only** when the user explicitly asked to throw such a project away; otherwise the build stops with
+`PROJECT_DIRTY_USER` and a message that names the project and the options (save it, close it, or discard on purpose).
+XOXOEDITZ's own projects are recognised by an ownership marker and handled automatically (see TROUBLESHOOTING.md).

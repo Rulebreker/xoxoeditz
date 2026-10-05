@@ -4,10 +4,29 @@ import { executeBuild } from '../ae/executor.js';
 import { musicLevelKeys } from '../audio/sound.js';
 import { masterEnd } from '../plan/schema.js';
 
-export async function repairIssues(bridge, qa, { plan, build, narration, manifest, logger }) {
+export const issueKey = (i) => `${i.code}:${i.comp ?? ''}:${i.layer ?? ''}`;
+
+/**
+ * One repair round. `attempt` escalates the strategy for an issue that survived the previous round (attempt 1 = the
+ * gentle fix, 2 = a stronger one, 3 = rebuild the owning unit). An action only says what was APPLIED (`success`);
+ * whether it WORKED is decided by the caller, who re-inspects the project and re-runs QA (see `verifyRepairs`).
+ */
+export async function repairIssues(bridge, qa, { plan, build, narration, manifest, logger, attempt = 1, fullBuild = null }) {
   const actions = [];
   const done = new Set();
-  const note = (issue, action, res) => actions.push({ code: issue.code, comp: issue.comp, layer: issue.layer, action, success: Boolean(res?.success), error: res?.success ? undefined : res?.error });
+  const note = (issue, action, res) => actions.push({ key: issueKey(issue), code: issue.code, comp: issue.comp, layer: issue.layer, action, attempt, success: Boolean(res?.success), error: res?.success ? undefined : res?.error });
+  const { width: W, height: H } = plan.output;
+  const unitFor = async (issue) => {
+    const find = (b) => b.stages.flatMap((s) => s.units).find((u) => (u.primary === issue.layer || (u.names || []).includes(issue.layer)) && (u.alternatives[0].ops.some(([, a]) => a.comp === issue.comp)));
+    return find(build) || (fullBuild ? find(await fullBuild()) : null);
+  };
+  const rebuildUnit = async (issue) => {
+    const unit = await unitFor(issue);
+    if (!unit) return null;
+    const mini = { stages: [{ id: 'repair', label: 'repair', units: [{ ...unit, optional: false }] }], meta: { warnings: [], resolutions: [] } };
+    const r = await executeBuild(bridge, mini, { logger });
+    return { success: r.success && r.errors.length === 0, error: r.errors[0]?.message, unit: unit.id };
+  };
 
   for (const issue of qa.errors.concat(qa.warnings)) {
     if (!issue.repairable) continue;
@@ -16,27 +35,24 @@ export async function repairIssues(bridge, qa, { plan, build, narration, manifes
     done.add(key);
     const { width: W, height: H } = plan.output;
 
-    if (issue.code === 'TEXT_OUT_OF_FRAME') {
-      const { bounds: b, position: p, scale: s } = issue.data;
-      if (!b || !p) continue;
-      const margin = Math.min(W, H) * 0.05;
-      let sc = s?.[0] ?? 100;
-      let width = b.width; let height = b.height; let left = b.left; let top = b.top;
-      const maxW = W - margin * 2; const maxH = H - margin * 2;
-      const k = Math.min(1, maxW / width, maxH / height);
-      if (k < 1) { // shrink about the layer's anchor, then re-centre the box
-        const cx = left + width / 2; const cy = top + height / 2;
-        width *= k; height *= k; sc *= k;
-        left = cx - width / 2; top = cy - height / 2;
-        p[0] = p[0] + (left - b.left) ; p[1] = p[1] + (top - b.top);
-        const r1 = await bridge.call('set_property', { comp: issue.comp, layer: issue.layer, prop: 'scale', value: [sc, sc] });
-        if (!r1.success) { note(issue, 'scale-to-fit', r1); continue; }
-      }
-      let dx = 0; let dy = 0;
-      if (left < margin) dx = margin - left; else if (left + width > W - margin) dx = W - margin - (left + width);
-      if (top < margin) dy = margin - top; else if (top + height > H - margin) dy = H - margin - (top + height);
-      const r = await bridge.call('set_property', { comp: issue.comp, layer: issue.layer, prop: 'position', value: [p[0] + dx, p[1] + dy] });
-      note(issue, `move-into-frame (${Math.round(dx)},${Math.round(dy)})${k < 1 ? ` + scale ${(k * 100).toFixed(0)}%` : ''}`, r);
+    if (issue.code === 'TEXT_OUT_OF_FRAME' || issue.code === 'TEXT_OUTSIDE_SAFE') {
+      // Re-fit with MEASURED bounds inside After Effects: wrap first, shrink only if needed, never touch Scale. The
+      // caller re-inspects and re-runs QA; if this did not fix it, the next attempt is stronger, then the unit is rebuilt.
+      const role = issue.data?.role;
+      if (attempt >= 3) { const r = await rebuildUnit(issue); if (r) note(issue, `rebuild-unit ${r.unit}`, r); else note(issue, 'rebuild-unit (no unit found)', { success: false, error: 'owning unit not found' }); continue; }
+      const m = role === 'CAPTION' ? 0.03 : 0.05; const safe = { left: W * m, top: H * (role === 'CAPTION' ? 0.03 : 0.08), right: W * (1 - m), bottom: H * (role === 'CAPTION' ? 0.97 : 0.90) };
+      const strong = attempt >= 2;
+      const box = strong ? { left: safe.left + W * 0.02, top: safe.top + H * 0.02, right: safe.right - W * 0.02, bottom: safe.bottom - H * 0.02 } : safe;
+      const r = await bridge.call('text_fit', { comp: issue.comp, layer: issue.layer, box, maxLines: strong ? 4 : 3, minSize: strong ? 8 : undefined });
+      note(issue, `text_fit${strong ? ' (stronger margin, 4 lines)' : ''}`, r.success && r.data?.fits !== false ? r : { success: false, error: r.success ? 'text still does not fit after text_fit' : r.error });
+    } else if (issue.code === 'TEXT_UNEXPECTED') {
+      const keep = [...new Set([...Object.values(build.meta.unitNames || {}).flat(), ...(build.meta.textLayers || []).flatMap((t) => [t.name, ...(t.children || [])])])];
+      note(issue, 'prune-stale-text', await bridge.call('layers_prune', { comp: issue.comp, keep, kinds: ['text', 'textdecor'], orphans: true }));
+    } else if (issue.code === 'TEXT_TIMING') {
+      if (attempt >= 2) { const r = await rebuildUnit(issue); if (r) note(issue, `rebuild-unit ${r.unit}`, r); continue; }
+      note(issue, 'set-text-interval', await bridge.call('layer_set', { comp: issue.comp, layer: issue.layer, props: { inPoint: issue.data.start, outPoint: issue.data.end } }));
+    } else if (issue.code === 'TEXT_KEYFRAMES_OUTSIDE') {
+      const r = await rebuildUnit(issue); if (r) note(issue, `rebuild-unit ${r.unit}`, r);
     } else if (issue.code === 'COMP_DURATION_MISMATCH') {
       note(issue, 'set-comp-duration', await bridge.call('comp_set', { comp: issue.comp, duration: issue.data.want }));
     } else if (issue.code === 'AUDIO_MUTED') {
@@ -50,12 +66,9 @@ export async function repairIssues(bridge, qa, { plan, build, narration, manifes
       const keys = musicLevelKeys({ gainDb: m.gainDb ?? -20, duckDb: m.duckDb ?? -10, fadeIn: m.fadeIn ?? 2, fadeOut: m.fadeOut ?? 3, layerStart: m.start ?? 0, layerEnd: m.end ?? end, speech: narration.speech });
       note(issue, 'reapply-ducking', await bridge.call('keyframes', { comp: MASTER, layer: issue.layer, prop: 'audioLevels', keys, ease: 'linear' }));
     } else if (issue.code === 'MISSING_LAYER') {
-      // Re-run the unit that should have produced the layer, with its full alternative chain.
-      const unit = build.stages.flatMap((s) => s.units).find((u) => u.primary === issue.layer && (u.alternatives[0].ops.some(([, a]) => a.comp === issue.comp)));
-      if (!unit) continue;
-      const mini = { stages: [{ id: 'repair', label: 'repair', units: [unit] }], meta: { warnings: [], resolutions: [] } };
-      const r = await executeBuild(bridge, mini, { logger });
-      note(issue, `rebuild-unit ${unit.id}`, { success: r.success && r.errors.length === 0, error: r.errors[0]?.message });
+      // Re-run the unit that should have produced the layer, with its full alternative chain (a required unit fails loudly).
+      const r = await rebuildUnit(issue);
+      if (r) note(issue, `rebuild-unit ${r.unit}`, r);
     }
   }
   return actions;

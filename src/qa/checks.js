@@ -6,6 +6,7 @@ import path from 'node:path';
 import { resolveStyle } from '../motion/styles.js';
 import { masterEnd } from '../plan/schema.js';
 import { MASTER } from '../ae/compile.js';
+import { safeBox, textMayCoexist } from '../typography/engine.js';
 
 export const CHECKS = ['PROJECT_CHECK', 'ASSET_CHECK', 'TIMELINE_CHECK', 'TEXT_CHECK', 'AUDIO_CHECK', 'EFFECT_CHECK', 'COMPOSITION_CHECK', 'RENDER_CHECK'];
 
@@ -77,34 +78,78 @@ export function timelineCheck({ plan, narration, inspect, build }) {
   return out;
 }
 
+const rectsOverlap = (a, b) => {
+  const w = Math.min(a.left + a.width, b.left + b.width) - Math.max(a.left, b.left);
+  const h = Math.min(a.top + a.height, b.top + b.height) - Math.max(a.top, b.top);
+  if (!(w > 0 && h > 0)) return 0;
+  return (w * h) / (Math.min(a.width * a.height, b.width * b.height) || 1);
+};
+
+/**
+ * TEXT_CHECK. Bounds come from the host at the layer's REST time (entrance finished), never from comp time 0.
+ *  - TEXT_OUT_OF_FRAME / TEXT_OUTSIDE_SAFE: the measured box leaves the frame / the safe area (5 % L/R, 8 % top, 10 % bottom).
+ *  - TEXT_OVERLAP: role-aware. Text over footage is normal; two texts visible at once must be an allowed pair of roles
+ *    (title + lower third, title + caption, ...) in separate areas. Several independent headlines/shot titles at once
+ *    are an error, not a warning.
+ *  - TEXT_UNEXPECTED: a text layer the plan does not account for (stale, orphan, duplicate) - the "J-29..J-20" pile-up.
+ *  - TEXT_TIMING / TEXT_KEYFRAMES_OUTSIDE: a text layer must be visible exactly in its planned interval and animation keys
+ *    must stay inside it.
+ */
 export function textCheck({ plan, inspect, build, caps }) {
   const out = [];
-  const { width: W, height: H } = plan.output;
+  const { width: W, height: H, fps = 24 } = plan.output;
   const style = resolveStyle(plan.style, caps);
-  const edge = Math.min(W, H) * 0.03;
+  const edge = Math.min(W, H) * 0.03; const eps = 2 / fps;
+  const safe = safeBox({ w: W, h: H });
+  const planned = build?.meta?.textLayers || null;
+  const byName = new Map(); const expectedNames = new Set();
+  if (planned) {
+    for (const t of planned) { byName.set(t.name, t); expectedNames.add(t.name); for (const c of t.children || []) { byName.set(c, { ...t, name: c, child: true }); expectedNames.add(c); } }
+    for (const names of Object.values(build.meta.unitNames || {})) for (const n of names) expectedNames.add(n);
+  }
   for (const c of compsOf(inspect)) {
-    const texts = (c.layers || []).filter((l) => l.kind === 'text' && l.enabled !== false); // a hidden layer (e.g. the base of kinetic type) shows nothing
+    const all = (c.layers || []).filter((l) => l.kind === 'text');
+    const texts = all.filter((l) => l.enabled !== false); // a hidden layer (e.g. the base of kinetic type) shows nothing
+    const roleOf = (l) => l.mark?.role || byName.get(l.name)?.role || (/^CAP_/.test(l.name) ? 'CAPTION' : null);
     for (const l of texts) {
+      const role = roleOf(l);
       if (!String(l.text || '').trim()) out.push(issue('TEXT_CHECK', 'TEXT_EMPTY', 'warning', `${c.name}/${l.name} is empty.`, { comp: c.name, layer: l.name }));
       if (l.fontSize && l.fontSize < H * 0.022) out.push(issue('TEXT_CHECK', 'TEXT_TOO_SMALL', 'warning', `${c.name}/${l.name} is ${l.fontSize}px on a ${H}px frame — likely unreadable.`, { comp: c.name, layer: l.name }));
+      if (planned && c.name === MASTER && !expectedNames.has(l.name)) {
+        out.push(issue('TEXT_CHECK', 'TEXT_UNEXPECTED', 'error', `${c.name}/${l.name} ("${String(l.text || '').slice(0, 30)}") is a text layer the plan does not account for (stale, orphaned or duplicated).`, { comp: c.name, layer: l.name, repairable: true, data: { role, text: l.text } }));
+        continue;
+      }
+      const exp = byName.get(l.name);
+      if (exp && !exp.child && Number.isFinite(exp.start) && Number.isFinite(exp.end)) {
+        if (Math.abs(l.inPoint - exp.start) > eps || Math.abs(l.outPoint - exp.end) > eps) out.push(issue('TEXT_CHECK', 'TEXT_TIMING', 'error', `${c.name}/${l.name} is visible ${l.inPoint.toFixed(2)}–${l.outPoint.toFixed(2)}s but is planned for ${exp.start.toFixed(2)}–${exp.end.toFixed(2)}s.`, { comp: c.name, layer: l.name, repairable: true, data: { start: exp.start, end: exp.end, inPoint: l.inPoint, outPoint: l.outPoint } }));
+      }
+      if (l.keyRange && (l.keyRange[0] < l.inPoint - eps || l.keyRange[1] > l.outPoint + eps)) out.push(issue('TEXT_CHECK', 'TEXT_KEYFRAMES_OUTSIDE', 'error', `${c.name}/${l.name} has animation keyframes (${l.keyRange[0].toFixed(2)}–${l.keyRange[1].toFixed(2)}s) outside its visible interval (${l.inPoint.toFixed(2)}–${l.outPoint.toFixed(2)}s); animation must not change when text is visible.`, { comp: c.name, layer: l.name, repairable: true, data: { stage: 'text' } }));
       const b = l.bounds;
       if (!b) continue;
       const right = b.left + b.width; const bottom = b.top + b.height;
+      const info = { comp: c.name, layer: l.name, repairable: true, data: { bounds: b, position: l.position, scale: l.scale, role, restTime: l.restTime } };
       if (b.left < 0 || b.top < 0 || right > W || bottom > H) {
-        out.push(issue('TEXT_CHECK', 'TEXT_OUT_OF_FRAME', 'error', `${c.name}/${l.name} extends outside the frame (${Math.round(b.left)},${Math.round(b.top)} ${Math.round(b.width)}x${Math.round(b.height)}).`, { comp: c.name, layer: l.name, repairable: true, data: { bounds: b, position: l.position, scale: l.scale } }));
+        out.push(issue('TEXT_CHECK', 'TEXT_OUT_OF_FRAME', 'error', `${c.name}/${l.name} extends outside the frame (${Math.round(b.left)},${Math.round(b.top)} ${Math.round(b.width)}x${Math.round(b.height)} in a ${W}x${H} frame).`, info));
+      } else if (role !== 'CAPTION' && role !== null && (b.left < safe.left - 1 || b.top < safe.top - 1 || right > safe.right + 1 || bottom > safe.bottom + 1)) {
+        out.push(issue('TEXT_CHECK', 'TEXT_OUTSIDE_SAFE', 'error', `${c.name}/${l.name} (${role}) leaves the safe area (${Math.round(b.left)},${Math.round(b.top)} ${Math.round(b.width)}x${Math.round(b.height)}; safe ${Math.round(safe.left)},${Math.round(safe.top)}–${Math.round(safe.right)},${Math.round(safe.bottom)}).`, info));
       } else if (b.left < edge || b.top < edge || right > W - edge || bottom > H - edge) {
         out.push(issue('TEXT_CHECK', 'TEXT_OUTSIDE_SAFE', 'warning', `${c.name}/${l.name} is inside the title-safe margin.`, { comp: c.name, layer: l.name }));
       }
     }
     for (let i = 0; i < texts.length; i++) for (let j = i + 1; j < texts.length; j++) {
       const a = texts[i]; const b = texts[j];
-      if (!a.bounds || !b.bounds || a.outPoint <= b.inPoint || b.outPoint <= a.inPoint) continue;
-      const w = Math.min(a.bounds.left + a.bounds.width, b.bounds.left + b.bounds.width) - Math.max(a.bounds.left, b.bounds.left);
-      const h = Math.min(a.bounds.top + a.bounds.height, b.bounds.top + b.bounds.height) - Math.max(a.bounds.top, b.bounds.top);
-      if (w > 0 && h > 0) {
-        const area = w * h; const small = Math.min(a.bounds.width * a.bounds.height, b.bounds.width * b.bounds.height) || 1;
-        if (area / small > 0.15) out.push(issue('TEXT_CHECK', 'TEXT_OVERLAP', 'warning', `${c.name}: ${a.name} and ${b.name} overlap on screen at the same time.`, { comp: c.name, layer: a.name, data: { other: b.name } }));
+      if (a.outPoint <= b.inPoint + eps / 2 || b.outPoint <= a.inPoint + eps / 2) continue; // not visible together
+      const ra = roleOf(a); const rb = roleOf(b);
+      if (ra && rb) {
+        const same = (byName.get(a.name)?.id && byName.get(a.name)?.id === byName.get(b.name)?.id); if (same) continue; // words of one kinetic title
+        if (!textMayCoexist(ra, rb)) {
+          out.push(issue('TEXT_CHECK', 'TEXT_OVERLAP', 'error', `${c.name}: ${a.name} (${ra}) and ${b.name} (${rb}) are visible at the same time (${Math.max(a.inPoint, b.inPoint).toFixed(2)}–${Math.min(a.outPoint, b.outPoint).toFixed(2)}s); ${ra === rb ? `two ${ra} texts` : 'these roles'} may not share the frame.`, { comp: c.name, layer: a.name, data: { other: b.name, roles: [ra, rb] } }));
+          continue;
+        }
+        if (a.bounds && b.bounds && rectsOverlap(a.bounds, b.bounds) > 0.05) out.push(issue('TEXT_CHECK', 'TEXT_OVERLAP', 'error', `${c.name}: ${a.name} (${ra}) and ${b.name} (${rb}) may share the frame but their boxes overlap.`, { comp: c.name, layer: a.name, data: { other: b.name, roles: [ra, rb] } }));
+        continue;
       }
+      if (a.bounds && b.bounds && rectsOverlap(a.bounds, b.bounds) > 0.15) out.push(issue('TEXT_CHECK', 'TEXT_OVERLAP', 'warning', `${c.name}: ${a.name} and ${b.name} overlap on screen at the same time.`, { comp: c.name, layer: a.name, data: { other: b.name } }));
     }
   }
   for (const [name, hex] of [['text', style.colors.text], ['accent', style.colors.accent], ['muted', style.colors.muted]]) {

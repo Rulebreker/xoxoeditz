@@ -16,21 +16,34 @@ XOXO.layerKind = function (l) {
 };
 
 XOXO.layerBounds = function (comp, l) {
-  // Approximate comp-space bounds from source rect * scale around anchor (ignores rotation/3D).
+  // Comp-space bounds MEASURED AT REST (entrance done), not at comp time 0 where a keyed scale/position is still on its
+  // first keyframe. Rotation and 3D are ignored.
   try {
-    var t = Math.min(Math.max(l.inPoint + 0.0001, 0), comp.duration);
-    var r = l.sourceRectAtTime(t, false);
-    var tr = l.property("ADBE Transform Group");
-    var pos = tr.property("ADBE Position").valueAtTime(t, false);
-    var anc = tr.property("ADBE Anchor Point").valueAtTime(t, false);
-    var sc = tr.property("ADBE Scale").valueAtTime(t, false);
-    var sx = sc[0] / 100, sy = sc[1] / 100;
-    var left = pos[0] + (r.left - anc[0]) * sx;
-    var top = pos[1] + (r.top - anc[1]) * sy;
-    return { left: left, top: top, width: r.width * sx, height: r.height * sy };
+    var t = XOXO.restTime(l);
+    t = Math.min(Math.max(t, 0), comp.duration);
+    return XOXO.compRect(l, t);
   } catch (e) {
     return null;
   }
+};
+
+// Earliest / latest keyframe time over the animatable transform properties (null when nothing is keyed).
+XOXO.keyRange = function (l) {
+  var lo = null, hi = null;
+  var names = ["ADBE Opacity", "ADBE Position", "ADBE Scale", "ADBE Rotate Z"];
+  try {
+    var tr = l.property("ADBE Transform Group");
+    for (var n = 0; n < names.length; n++) {
+      var p = tr.property(names[n]);
+      if (!p) continue;
+      for (var i = 1; i <= p.numKeys; i++) {
+        var kt = p.keyTime(i);
+        if (lo === null || kt < lo) lo = kt;
+        if (hi === null || kt > hi) hi = kt;
+      }
+    }
+  } catch (e) { }
+  return lo === null ? null : [lo, hi];
 };
 
 XOXO.describeLayerFull = function (comp, l, withBounds) {
@@ -49,6 +62,9 @@ XOXO.describeLayerFull = function (comp, l, withBounds) {
   d.effects = fx;
   try { if (l.timeRemapEnabled) d.timeRemapKeys = l.property("ADBE Time Remapping").numKeys; } catch (e12) { }
   try { d.motionBlur = !!l.motionBlur; } catch (e13) { }
+  var mk = XOXO.layerMark(l);
+  if (mk) d.mark = mk;
+  try { var kr = XOXO.keyRange(l); if (kr) d.keyRange = kr; } catch (e14) { }
   if (d.kind === "text") {
     try { d.text = l.property("ADBE Text Properties").property("ADBE Text Document").value.text; } catch (e7) { }
     try { d.fontSize = l.property("ADBE Text Properties").property("ADBE Text Document").value.fontSize; } catch (e8) { }
@@ -61,7 +77,10 @@ XOXO.describeLayerFull = function (comp, l, withBounds) {
   try { d.position = l.property("ADBE Transform Group").property("ADBE Position").value; } catch (e10) { }
   try { d.scale = l.property("ADBE Transform Group").property("ADBE Scale").value; } catch (e11) { }
   try { d.numMasks = l.property("ADBE Mask Parade").numProperties; } catch (e12) { }
-  if (withBounds && (d.kind === "text" || d.kind === "shape")) d.bounds = XOXO.layerBounds(comp, l);
+  if (withBounds && (d.kind === "text" || d.kind === "shape")) {
+    d.bounds = XOXO.layerBounds(comp, l);
+    try { d.restTime = XOXO.restTime(l); } catch (e15) { }
+  }
   return d;
 };
 

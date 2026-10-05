@@ -124,7 +124,7 @@ export function compileTimeline(plan, { manifest, library = null, narration = nu
     if (hasMotion || hasRemap) alts.push({ name: 'static', quality: 0.35, ops: build('static').ops });
     const names = [...new Set(alts.flatMap((a) => namesOf(a.ops)))];
     const primary = targets[0] || names[0];
-    alts.push({ name: 'placeholder', quality: 0.05, ops: [['layers_remove', { comp: MASTER, names, prefix: false }], ['layer_add_solid', { comp: MASTER, name: `${primary}`, color: '#3a0d0d', start: layerStart, end: layerEnd }], ['layer_add_text', { comp: MASTER, name: `${primary}_MISSING`, text: `MISSING: ${s.id}`, size: Math.round(H * 0.04), color: '#ff6a6a', start: layerStart, end: layerEnd }]] });
+    alts.push({ name: 'placeholder', quality: 0.05, ops: [['layers_remove', { comp: MASTER, names, prefix: false }], ['layer_add_solid', { comp: MASTER, name: `${primary}`, color: '#3a0d0d', start: layerStart, end: layerEnd }], ['layer_add_text', { comp: MASTER, name: `${primary}_MISSING`, text: `MISSING: ${s.id}`, size: Math.round(H * 0.04), color: '#ff6a6a', start: layerStart, end: layerEnd, mark: { k: 'placeholder', id: `${primary}_MISSING` } }]] });
     warnings.push(...full.warnings.map((w) => `${s.id}: ${w}`));
     const u = unit({ id: `shot.${s.id}`, label: `${s.id} ${s.template}`, primary, names, alternatives: alts });
     su.push(u);
@@ -169,12 +169,17 @@ export function compileTimeline(plan, { manifest, library = null, narration = nu
   stages.push({ id: 'looks', label: 'Look: colour, grain, vignette, letterbox', units: lu.filter(keep) });
 
   // ---------- text ----------
-  const xu = []; const textNames = []; const beats = plan.beatMap?.beats || [];
+  // Every text unit owns an explicit interval (start/end/duration inside its shot), a semantic role and a deterministic
+  // id (TXT_TITLE_01, TXT_END_01, ...). TITLE / END_CARD marked required are NOT optional: if every alternative fails the
+  // build fails loudly instead of silently dropping them. An optional text that cannot be built is reported, never hidden.
+  const xu = []; const textNames = []; const textLayers = []; const beats = plan.beatMap?.beats || [];
   for (const s of shots) for (const t of s.text) {
     const tu2 = buildTextUnit(t, { comp, fps, caps, style: { font: style.fonts.display, color: style.colors.text, stroke: '#000000', strokeWidth: Math.max(2, Math.round(H * 0.002)) }, beats, accent: style.colors.accent, dir: 0 });
     // a unit owns every layer any of its alternatives creates (kinetic type makes one layer per word)
     tu2.names = [...new Set([...tu2.names, ...tu2.alternatives.flatMap((a) => namesOf(a.ops))])];
-    tu2.optional = true; tu2.primary = tu2.names[0]; xu.push(tu2); textNames.push(...tu2.names);
+    tu2.primary = tu2.names[0]; xu.push(tu2); textNames.push(...tu2.names);
+    textLayers.push({ ...tu2.text, id: tu2.text.name, shotId: s.id, sceneId: s.id, animation: t.animation, children: tu2.names.filter((n) => n !== tu2.text.name && /^TXT_/.test(n)) });
+    delete tu2.text;
   }
   stages.push({ id: 'text', label: `Type (${xu.length})`, units: xu.filter(keep) });
 
@@ -213,9 +218,17 @@ export function compileTimeline(plan, { manifest, library = null, narration = nu
   if (plan.captions?.enabled && narration) {
     const chunks = buildCaptionChunks({ sentences: narration.sentences || [], words: narration.words || null }, { maxChars: H > W ? 22 : 38, maxLines: 2 });
     const size = Math.round(style.type.captionSize * H * (H > W ? 0.9 : 1)); const pos = [W / 2, Math.round(H * (1 - style.captions.bottom))];
-    const cu = chunks.map((c, i) => { const name = `CAP_${String(i + 1).padStart(4, '0')}`; textNames.push(name); const rm = ['layers_remove', { comp: MASTER, names: [name] }]; const add = ['layer_add_text', { comp: MASTER, name, text: c.text, size, font: style.fonts.body, color: style.colors.text, stroke: '#000000', strokeWidth: Math.max(2, Math.round(size * 0.08)), position: pos, justify: 'center', start: c.start, end: c.end }]; return unit({ id: `caption.${i + 1}`, label: name, optional: true, primary: name, names: [name], alternatives: [{ name: 'fade', quality: 1, ops: [rm, add, ['keyframes', { comp: MASTER, layer: name, prop: 'opacity', keys: [{ t: c.start, v: 0 }, { t: c.start + 0.12, v: 100 }, { t: c.end - 0.1, v: 100 }, { t: c.end, v: 0 }], ease: 'linear' }]] }, { name: 'plain', quality: 0.5, ops: [rm, add] }] }); });
+    const cu = chunks.map((c, i) => { const name = `CAP_${String(i + 1).padStart(4, '0')}`; textNames.push(name); const rm = ['layers_remove', { comp: MASTER, names: [name] }]; textLayers.push({ name, role: 'CAPTION', id: name, shotId: null, sceneId: null, start: c.start, end: c.end, duration: round(c.end - c.start, 4), required: false }); const add = ['layer_add_text', { comp: MASTER, name, text: c.text, size, font: style.fonts.body, color: style.colors.text, stroke: '#000000', strokeWidth: Math.max(2, Math.round(size * 0.08)), position: pos, justify: 'center', start: c.start, end: c.end, role: 'CAPTION', mark: { k: 'text', role: 'CAPTION', id: name } }]; return unit({ id: `caption.${i + 1}`, label: name, optional: true, primary: name, names: [name], alternatives: [{ name: 'fade', quality: 1, ops: [rm, add, ['keyframes', { comp: MASTER, layer: name, prop: 'opacity', keys: [{ t: c.start, v: 0 }, { t: c.start + 0.12, v: 100 }, { t: c.end - 0.1, v: 100 }, { t: c.end, v: 0 }], ease: 'linear' }]] }, { name: 'plain', quality: 0.5, ops: [rm, add] }] }); });
     stages.push({ id: 'captions', label: `Captions (${cu.length})`, units: cu.filter(keep) });
   }
+
+  // ---------- stale text: anything generated that the current plan no longer wants ----------
+  // Runs first in the text stage on every build (never reused): removes text/decor layers that carry an XOXO mark but are
+  // not expected (a renamed or deleted text unit, an earlier plan) and unmarked text layers named after their own text
+  // (orphans of a failed build). Expected names come from EVERY unit, reused or not.
+  const expected = [...new Set([...Object.values(unitNames).flat(), ...textNames, ...lookNames])];
+  const prune = unit({ id: 'text.prune', label: 'remove stale text layers', optional: true, alternatives: [{ name: 'prune', quality: 1, ops: [['layers_prune', { comp: MASTER, keep: expected, kinds: ['text', 'textdecor'], orphans: true }]] }] });
+  stages.find((st) => st.id === 'text').units.unshift(prune);
 
   // ---------- finalize: z-order, end fade, markers, work area ----------
   const order = [];
@@ -246,6 +259,7 @@ export function compileTimeline(plan, { manifest, library = null, narration = nu
     meta: {
       mode: 'timeline', master: MASTER, width: W, height: H, fps, duration: end, style: style.name, sceneComps: [], shotLayers: allShotLayers,
       assetsUsed: [...used], resolutions, notes, warnings, expectedUnits, hashes, unitNames, reused, incremental, structure,
+      textLayers,
       stats: { shots: shots.length, transitions: tu.length, text: xu.length, sfx: plan.audio.sfxEvents.length, layers: order.length },
     },
   };

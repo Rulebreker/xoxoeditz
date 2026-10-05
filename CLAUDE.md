@@ -67,6 +67,18 @@ detailed craft rules for each role. Delegate when the task is large; otherwise f
 * Never let SFX/music fight the narration: music bed −18…−24 dB, ducked automatically; SFX −8…−14 dB.
 * 4K 16:9 by default; honour any other request (`1080p`, `9:16`, `square`, `2.39:1`) via `output`.
 
+### Text and project state (read before touching either)
+
+* Text is typography by **role** (TITLE, SUBTITLE, LOWER_THIRD, CAPTION, CALLOUT, HUD, LABEL, STAT, END_CARD, KEYWORD). Every item has an explicit
+  `start`/`end` inside its shot, a deterministic id (`TXT_TITLE_01`, `TXT_END_01`, `TXT_KEYWORD_03`) and a safe-area layout; headline roles never share a moment
+  (`allowOverlap` is the explicit opt-out). TITLE / END_CARD the Director asked for are *required*: they never get dropped silently.
+  Never write `TextDocument.allCaps` (read-only in AE 2026) - upper-case the string. See SHOT_TEMPLATES.md ▸ Text kinds.
+* QA repair is **verified**: check → repair → re-inspect → check again (up to 3 rounds, stronger each time). Do not report a repair as successful unless
+  `repairs[].verified` is true; a failed verification stays in the QA report.
+* After Effects holds one project at a time. `xoxo project status` shows who owns the open one. Your own projects are saved/switched automatically; **somebody
+  else's unsaved project is never modified or discarded** - the build stops with `PROJECT_DIRTY_USER`. Pass `--discard` / `discard:true` **only** if the user
+  explicitly said to throw that project away. Never set it on your own initiative.
+
 ## 4. Hard rules
 
 * **Do not invent After Effects APIs.** The host ops are listed by `xoxo_ae_ops` / `docs/AE_INTEGRATION.md`. If you

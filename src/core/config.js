@@ -18,6 +18,9 @@ export const DEFAULTS = {
   ffmpeg: null,
   ffprobe: null,
   whisper: null,
+  // What to do when After Effects has ANOTHER XOXOEDITZ project open with unsaved changes: 'save' (default) | 'discard'.
+  // This never applies to somebody else's project - those are only ever discarded by an explicit --discard.
+  dirtyXoxoPolicy: 'save',
   allowRawEval: false, // lets Claude run arbitrary ExtendScript. Off by default.
   allowInstall: false, // unattended plugin/software install. Off by default; see docs.
   libraryRoot: null, // universal asset library (XOXOEDITZ_ASSETS); env XOXOEDITZ_ASSETS / XOXO_LIBRARY

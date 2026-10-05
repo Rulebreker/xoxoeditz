@@ -34,6 +34,10 @@ describes music/beat-driven edits as a flat list of shots on one master timeline
 * Templates must exist and be implemented (`MAP_SCENE` is a documented TODO and is refused).
 * Footage assets, music and SFX must exist in the project manifest **or** the library; SFX events carry their fit plan.
 * Motion primitive types must exist; the colour look must be one of the nine.
+* Text: every item sits inside its shot (`at`/`start` ≥ shot start, `end` ≤ shot end), has a known role (`kind`), a unique id, and may not be
+  visible together with a text it may not share the frame with (see SHOT_TEMPLATES.md ▸ Text kinds) unless `allowOverlap: true`.
+  `normalizeTimeline` completes hand-written items: `start`/`end`/`duration`, `shotId`/`sceneId`, `role`, a deterministic `TXT_<ROLE>_<nn>` id,
+  `required` (default false; the Director sets it for the title and end card) and a `layout` (safe-area fit).
 
 ## How a shot becomes layers
 

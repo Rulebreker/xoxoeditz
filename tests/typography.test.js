@@ -86,11 +86,11 @@ test('every text animation resolves everywhere and builds ops the host accepts (
       runOps(m, alt.ops);                            // and re-running is idempotent (no duplicate layers)
       const layers = compLayers(m).map((l) => l.name);
       assert.equal(new Set(layers).size, layers.length, `${animation}/${alt.name}: duplicate layer names ${layers}`);
-      assert.ok(layers.includes(`TXT_${entry.id}`) || layers.some((n) => n.startsWith(`TXT_${entry.id}`)), `${animation}/${alt.name}: text layer exists`);
+      const lname = String(entry.id).startsWith('TXT_') ? entry.id : `TXT_${entry.id}`; assert.ok(layers.includes(lname), `${animation}/${alt.name}: text layer exists`);
     }
   }
   const bareUnit = buildTextUnit({ id: 'B', kind: 'TITLE', text: 'HELLO', animation: 'blur_reveal', at: 0, dur: 2, animDur: 0.5, outDur: 0.25, layout: layoutText('TITLE', 'HELLO', COMP) }, { comp: COMP, caps: bare });
-  assert.deepEqual(bareUnit.alternatives.map((a) => a.name), ['scale_settle', 'fade_instead', 'plain'], 'without Gaussian Blur the chain degrades in order');
+  assert.deepEqual(bareUnit.alternatives.map((a) => a.name), ['scale_settle', 'fade_instead', 'title_slide', 'title_opacity', 'title_position', 'plain'], 'without Gaussian Blur the chain degrades in order, then the TITLE role fallbacks, then a plain static layer');
 });
 
 test('kinetic type: one layer per word on the beats, replacing each other at the same spot; base layer is hidden', () => {

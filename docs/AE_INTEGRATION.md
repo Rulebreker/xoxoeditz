@@ -54,6 +54,17 @@ match names in `src/effects/registry.js` (display-name lookup already softens th
 (idempotent cleanup, optionally by prefix), mask `ellipse`/`inverted`, `text_reveal unit:"words"`; `inspect` now reports
 position / scale / mask count for every layer. Full list: `xoxo bridge ops`.
 
+## Text and project-state host operations (text/timeline engine fix)
+`layer_add_text` is atomic (a failure removes the half-built layer), applies name / in / out / ownership mark (`Layer.comment`:
+`XOXO|k=text|role=TITLE|id=TXT_TITLE_01|shot=S01|rest=1.25`) before any styling, upper-cases the *string* for `caps:"upper"` and never writes the
+read-only `TextDocument.allCaps` (After Effects 2026). `text_fit` fits a text layer into a pixel box from `sourceRectAtTime` measured at
+the layer's rest time; `layers_prune` removes generated layers the plan no longer wants (plus unmarked text layers named after their own
+text - orphans of failed builds); `keyframes` accepts `relative:true` (offsets from the fitted position). `inspect` reports text bounds
+measured at rest, `restTime`, `keyRange` and the ownership `mark`. `project_status` / `project_mark` / `project_close` implement the
+project-ownership policy in `src/ae/project.js` (an `XOXO_META` folder item carries `XOXOEDITZ|v=1|project=<name>`).
+**These host changes are validated only against the simulator** - run `xoxo selftest` (and a short real edit) on a machine with After
+Effects; likely tweak points: `jsx/30_layers.jsx` (`text_fit`, `layers_prune`), `jsx/70_inspect.jsx` (`restTime`, `keyRange`).
+
 ## Adding a host operation
 1. Implement in the right `jsx/NN_*.jsx` with `XOXO.op("name", function (a) {…})`; validate args with `XOXO.need`;
    throw `XOXO.err(message, CODE, recoverable)`; keep it idempotent.

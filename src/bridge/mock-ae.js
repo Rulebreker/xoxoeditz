@@ -237,10 +237,15 @@ function buildEffect(mn, def) {
 class MarkerValue { constructor(comment) { this.comment = comment; this.duration = 0; } }
 class Shape { constructor() { this.vertices = []; this.inTangents = []; this.outTangents = []; this.closed = true; } }
 class TextDocument {
-  constructor(text) {
+  constructor(text, { readOnlyCaps = true } = {}) {
     this.text = text; this.fontSize = 72; this.font = 'ArialMT'; this.fillColor = [1, 1, 1]; this.applyFill = true; this.applyStroke = false;
-    this.strokeColor = [0, 0, 0]; this.strokeWidth = 0; this.justification = 7415; this.tracking = 0; this.leading = 0; this.autoLeading = true; this.allCaps = false;
+    this.strokeColor = [0, 0, 0]; this.strokeWidth = 0; this.justification = 7415; this.tracking = 0; this.leading = 0; this.autoLeading = true;
+    this._readOnlyCaps = readOnlyCaps; this._allCaps = false;
   }
+  // After Effects 2026 made TextDocument.allCaps read-only: assigning throws. The mock reproduces that by default
+  // (createMockAE({ legacyAllCaps: true }) gives the old writable behaviour) so the regression stays caught.
+  get allCaps() { return this._allCaps; }
+  set allCaps(v) { if (this._readOnlyCaps) throw new Error('Unable to set "allCaps". It is a readOnly attribute.'); this._allCaps = Boolean(v); }
   resetCharStyle() { this.fontSize = 72; this.fillColor = [1, 1, 1]; }
 }
 
@@ -345,7 +350,9 @@ const layerProto = {
     if (this._kind === 'text') {
       const doc = this._root.property('ADBE Text Properties').property('ADBE Text Document')._value;
       const lines = String(doc.text).split(/\r|\n/);
-      const w = Math.max(...lines.map((s) => s.length)) * doc.fontSize * 0.55;
+      // advance model: upper-case/digits wide, lower-case medium, narrow punctuation and spaces small, plus tracking (1/1000 em)
+      const adv = (ch) => (/[A-Z0-9]/.test(ch) ? 0.66 : /[mwMW@]/.test(ch) ? 0.8 : /[ilI.,:;'|!]/.test(ch) ? 0.28 : ch === ' ' ? 0.28 : 0.52) + (doc.tracking || 0) / 1000;
+      const w = Math.max(0, ...lines.map((ln) => [...ln].reduce((a, ch) => a + adv(ch), 0))) * doc.fontSize;
       const left = doc.justification === 7414 ? 0 : (doc.justification === 7415 ? -w : -w / 2);
       return { left: doc.justification === 7414 ? 0 : left, top: -doc.fontSize * 0.8, width: w, height: lines.length * doc.fontSize * 1.2 };
     }
@@ -364,6 +371,7 @@ Object.defineProperty(layerProto, 'threeD', { get() { return this.threeDLayer; }
 class LayerCollection {
   constructor(comp) { this.comp = comp; }
   _push(l) {
+    this.comp.project.dirty = true;
     Object.defineProperties(l, Object.getOwnPropertyDescriptors(layerProto));
     // threeDLayer promotes 2D vectors to 3D, like AE
     let td = false;
@@ -414,7 +422,7 @@ class LayerCollection {
   addNull(duration) { return this._push(makeLayer(this.comp, AVLayer, { name: 'Null', kind: 'null', duration })); }
   addText(text) {
     const l = makeLayer(this.comp, TextLayer, { name: String(text).slice(0, 24), kind: 'text' });
-    l._root.property('ADBE Text Properties').property('ADBE Text Document')._value = new TextDocument(String(text));
+    l._root.property('ADBE Text Properties').property('ADBE Text Document')._value = new TextDocument(String(text), { readOnlyCaps: !this.comp.project._app._legacyAllCaps });
     return this._push(l);
   }
   addBoxText(size, text) { const l = this.addText(text); l.boxSize = size; return l; }
@@ -447,8 +455,8 @@ function indexedItems(project) {
   return new Proxy({}, {
     get(_, k) {
       if (k === 'length') return project._items.length;
-      if (k === 'addComp') return (n, w, h, pa, d, f) => { const c = new CompItem(project, n, w, h, pa, d, f); project._items.push(c); return c; };
-      if (k === 'addFolder') return (n) => { const f = new FolderItem(project, n); project._items.push(f); return f; };
+      if (k === 'addComp') return (n, w, h, pa, d, f) => { const c = new CompItem(project, n, w, h, pa, d, f); project._items.push(c); project.dirty = true; return c; };
+      if (k === 'addFolder') return (n) => { const f = new FolderItem(project, n); project._items.push(f); project.dirty = true; return f; };
       const i = Number(k);
       if (Number.isInteger(i)) return project._items[i - 1];
       return undefined;
@@ -495,7 +503,7 @@ function defaultProbe(file) {
 /**
  * Build a mock After Effects instance. Returns { context, app, state, run(code), call(request), pump() }.
  */
-export function createMockAE({ effects = DEFAULT_EFFECTS, version = '25.0x57', probe = defaultProbe, fonts, allowFileAccess = true, withBundle = true } = {}) {
+export function createMockAE({ effects = DEFAULT_EFFECTS, version = '25.0x57', probe = defaultProbe, fonts, allowFileAccess = true, withBundle = true, legacyAllCaps = false } = {}) {
   const effectCatalog = new Map(effects.map(([mn, dn, cat, params]) => [mn, { displayName: dn, category: cat, params }]));
   const tasks = [];
   const project = { _items: [], _nextId: 0, dirty: false, file: null, renderQueue: new RenderQueue() };
@@ -519,8 +527,8 @@ export function createMockAE({ effects = DEFAULT_EFFECTS, version = '25.0x57', p
     fs.writeFileSync(project.file.fsName, JSON.stringify({ mock: 'MOCK-AEP', items: project._items.map((i) => ({ name: i.name, type: i.constructor.name, ...(i instanceof CompItem ? { width: i.width, height: i.height, duration: i.duration, fps: i.frameRate } : {}) })) }));
     project.dirty = false; state.saved.push(project.file.fsName);
   };
-  project.close = () => { project._items.length = 0; project.file = null; project.dirty = false; project.renderQueue = new RenderQueue(); };
-  project._app = { _effectCatalog: effectCatalog };
+  project.close = (opt) => { if (opt === 2 && project.file) project.save(); project._items.length = 0; project.file = null; project.dirty = false; project.renderQueue = new RenderQueue(); };
+  project._app = { _effectCatalog: effectCatalog, _legacyAllCaps: legacyAllCaps };
 
   const app = {
     version, buildName: 'Mock Build', isoLanguage: 'en_US', project,
@@ -539,7 +547,7 @@ export function createMockAE({ effects = DEFAULT_EFFECTS, version = '25.0x57', p
   const sandbox = {
     app, $: { os: 'Mock OS', writeln() {}, sleep() {}, global: null },
     File: function File(p) { return new MockFile(p); }, Folder: function Folder(p) { return new MockFolder(p); },
-    ImportOptions, ImportAsType: { FOOTAGE: 1, COMP: 2 }, CloseOptions: { DO_NOT_SAVE_CHANGES: 1 },
+    ImportOptions, ImportAsType: { FOOTAGE: 1, COMP: 2 }, CloseOptions: { DO_NOT_SAVE_CHANGES: 1, SAVE_CHANGES: 2, PROMPT_TO_SAVE_CHANGES: 3 },
     CompItem, FootageItem, FolderItem, AVLayer, TextLayer, ShapeLayer, CameraLayer, LightLayer, SolidSource,
     BlendingMode, TrackMatteType, ParagraphJustification: { LEFT_JUSTIFY: 7414, CENTER_JUSTIFY: 7413, RIGHT_JUSTIFY: 7415 },
     KeyframeEase, KeyframeInterpolationType, MarkerValue, Shape, FrameBlendingType: { NO_FRAME_BLEND: 4012, FRAME_MIX: 4013, PIXEL_MOTION: 4014 },

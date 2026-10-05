@@ -114,7 +114,7 @@ test('timeline build is idempotent and incremental: a second build reuses unchan
   const shorter = JSON.parse(JSON.stringify(plan)); const dropIdx = 3;
   const dropped = shorter.timeline.shots[dropIdx]; const len = dropped.end - dropped.start;
   shorter.timeline.shots.splice(dropIdx, 1); shorter.timeline.transitions.splice(dropIdx, 1);
-  shorter.timeline.shots.forEach((s, i) => { if (i >= dropIdx) { s.start = +(s.start - len).toFixed(4); s.end = +(s.end - len).toFixed(4); } });
+  shorter.timeline.shots.forEach((s, i) => { if (i >= dropIdx) { s.start = +(s.start - len).toFixed(4); s.end = +(s.end - len).toFixed(4); for (const t of s.text) for (const k of ['at', 'start', 'end']) if (t[k] !== undefined) t[k] = +(t[k] - len).toFixed(4); } });
   shorter.timeline.transitions.forEach((t, i) => { if (i >= dropIdx - 1) { t.cut = +(shorter.timeline.shots[i].end).toFixed(4); t.window = { start: +(t.cut - t.d / 2).toFixed(4), end: +(t.cut + t.d / 2).toFixed(4) }; } });
   shorter.timeline.duration = +(plan.timeline.duration - len).toFixed(4); shorter.timeline.shots[0] && (shorter.timeline.shots.at(-1).end = shorter.timeline.duration);
   shorter.audio.music.forEach((m) => { m.end = shorter.timeline.duration; }); shorter.audio.sfxEvents = shorter.audio.sfxEvents.filter((e) => e.at < shorter.timeline.duration - 0.5);

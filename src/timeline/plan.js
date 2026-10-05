@@ -11,10 +11,14 @@ import { resolveOutput } from '../plan/output.js';
 import { PRIMITIVES } from '../motion/primitives.js';
 import { LOOK_NAMES } from '../color/looks.js';
 import { mapDuration } from '../velocity/speedmap.js';
+import { TEXT_KINDS, ROLE_ABBR, layoutText, textMayCoexist } from '../typography/engine.js';
 
 export const TIMELINE_VERSION = 2;
 const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
 const isStr = (v) => typeof v === 'string' && v.length > 0;
+
+/** End time of a text item (explicit `end`, or at + dur/duration), null when it has none yet. */
+export const textEnd = (tx) => (isNum(tx.end) ? tx.end : isNum(tx.at) && isNum(tx.duration) ? tx.at + tx.duration : isNum(tx.at) && isNum(tx.dur) ? tx.at + tx.dur : null);
 
 export const isTimelinePlan = (plan) => plan?.mode === 'timeline' || plan?.version === TIMELINE_VERSION;
 
@@ -49,6 +53,7 @@ export function validateTimeline(plan, { manifest = null, library = null } = {})
   const known = (id) => !manifest && !library ? true : ids.has(id);
 
   const seen = new Set(); let prevEnd = 0;
+  const textIds = new Set(); const allText = [];
   tl.shots.forEach((s, i) => {
     const p = `timeline.shots[${i}]`;
     if (!isStr(s.id)) err(`${p}.id`, 'shot id is required'); else if (seen.has(s.id)) err(`${p}.id`, `duplicate shot id ${s.id}`); else seen.add(s.id);
@@ -79,10 +84,21 @@ export function validateTimeline(plan, { manifest = null, library = null } = {})
     for (const [k, tx] of (s.text || []).entries()) {
       const tp = `${p}.text[${k}]`;
       if (!isStr(tx.text)) err(`${tp}.text`, 'text is required');
-      if (!isNum(tx.at) || tx.at < s.start - 0.5 || tx.at > s.end + 0.5) err(`${tp}.at`, `text starts at ${tx.at}s, outside its shot (${s.start}-${s.end}s)`);
+      if (!isNum(tx.at) || tx.at < s.start - 1e-3 || tx.at > s.end + 1e-3) err(`${tp}.at`, `text starts at ${tx.at}s, outside its shot (${s.start}-${s.end}s)`);
+      const tEnd = textEnd(tx);
+      if (tEnd !== null && tEnd > s.end + 1e-3) err(`${tp}.end`, `text ${tx.id || `"${tx.text}"`} runs until ${tEnd}s but its shot ends at ${s.end}s: text must be visible only inside its own shot`);
+      if (tEnd !== null && isNum(tx.at) && tEnd - tx.at < 1 / fps) err(`${tp}.duration`, `text ${tx.id || `"${tx.text}"`} is visible for less than a frame`);
+      if (tx.kind !== undefined && !TEXT_KINDS[tx.kind]) err(`${tp}.kind`, `unknown text role "${tx.kind}" (known: ${Object.keys(TEXT_KINDS).join(', ')})`);
+      if (tx.id !== undefined) { if (textIds.has(tx.id)) err(`${tp}.id`, `duplicate text id ${tx.id}`); else textIds.add(tx.id); }
+      if (isNum(tx.at) && tEnd !== null) allText.push({ path: tp, id: tx.id, kind: tx.kind || 'SUBTITLE', start: tx.at, end: tEnd, allowOverlap: Boolean(tx.allowOverlap) });
       if (tx.layout && tx.layout.fits === false) warn(`${tp}.layout`, `text "${tx.text}" does not fit the safe area: ${(tx.layout.warnings || []).join('; ')}`);
     }
   });
+  // text that is visible at the same moment must be allowed to share the frame (headline roles never do)
+  for (let a = 0; a < allText.length; a++) for (let b = a + 1; b < allText.length; b++) {
+    const A = allText[a]; const B = allText[b];
+    if (A.start < B.end - 1e-3 && B.start < A.end - 1e-3 && !A.allowOverlap && !B.allowOverlap && !textMayCoexist(A.kind, B.kind)) err(B.path, `${B.kind} ${B.id || ''} (${B.start}-${B.end}s) is visible at the same time as ${A.kind} ${A.id || ''} (${A.start}-${A.end}s): unintentional text overlap (set allowOverlap to force it)`.replace(/ +/g, ' '));
+  }
   if (isNum(tl.duration) && Math.abs(prevEnd - tl.duration) > 1e-3) err('timeline.duration', `the last shot ends at ${prevEnd}s but the timeline duration is ${tl.duration}s`);
 
   const tr = tl.transitions || [];
@@ -120,5 +136,32 @@ export function normalizeTimeline(plan) {
   p.style = p.style || 'cinematic-documentary';
   p.timeline.transitions = p.timeline.transitions || [];
   p.timeline.shots.forEach((s) => { s.layers ||= []; s.text ||= []; s.overlays ||= []; });
+  completeText(p);
   return p;
+}
+
+/**
+ * Give every text item an explicit interval, role, shot, deterministic id and layout. Idempotent: a complete item is
+ * left alone. Intervals are clamped into the item's shot (text is visible only inside its own shot).
+ */
+function completeText(p) {
+  const { width: w, height: h, fps = 24 } = p.output; const counters = {}; const used = new Set();
+  for (const s of p.timeline.shots) for (const tx of s.text) if (tx.id) used.add(tx.id);
+  for (const s of p.timeline.shots) {
+    for (const tx of s.text) {
+      tx.kind ||= tx.role || 'SUBTITLE'; tx.role = tx.kind; const k = TEXT_KINDS[tx.kind];
+      tx.shotId = s.id; tx.sceneId = s.id; tx.required = Boolean(tx.required);
+      const hold = k ? k.hold[0] : 1;
+      let start = isNum(tx.at) ? tx.at : s.start; let end = textEnd(tx);
+      if (end === null) end = start + Math.max(hold, 2 / fps);
+      start = Math.min(Math.max(start, s.start), s.end - 2 / fps); end = Math.min(Math.max(end, start + 2 / fps), s.end);
+      tx.at = tx.start = +start.toFixed(4); tx.end = +end.toFixed(4); tx.dur = tx.duration = +(end - start).toFixed(4);
+      const outDur = tx.kind === 'KEYWORD' ? 0 : Math.min(0.25, tx.dur * 0.25);
+      tx.outDur = tx.outDur ?? +outDur.toFixed(4);
+      tx.animation ||= 'fade';
+      tx.animDur = Math.min(tx.animDur ?? 0.5, Math.max(2 / fps, (tx.dur - tx.outDur) * 0.8));
+      tx.layout ||= k ? layoutText(tx.kind, tx.text, { w, h }) : undefined;
+      if (!tx.id) { let n; do { counters[tx.kind] = (counters[tx.kind] || 0) + 1; tx.id = `TXT_${ROLE_ABBR[tx.kind] || tx.kind}_${String(counters[tx.kind]).padStart(2, '0')}`; n = tx.id; } while (used.has(n)); used.add(tx.id); }
+    }
+  }
 }

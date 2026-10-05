@@ -40,11 +40,20 @@ XOXO.op("keyframes", function (a) {
   var layer = XOXO.getLayer(comp, a.layer);
   var p = XOXO.prop(layer, a.prop);
   if (a.keys.length < 1) throw XOXO.err("keys must not be empty", "BAD_ARGS", false);
+  // relative: key values are OFFSETS from the property's current static value (used by text, whose final position is
+  // decided at build time by text_fit, after the animation was planned).
+  var base = null;
+  if (a.relative) base = (p.numKeys > 0) ? p.valueAtTime(a.keys[0].t, false) : p.value;
   if (a.clear !== false) XOXO.clearKeys(p);
   var i;
   for (i = 0; i < a.keys.length; i++) {
     var k = a.keys[i];
-    p.setValueAtTime(k.t, XOXO.coerce(p, k.v));
+    var kv = k.v;
+    if (base !== null) {
+      if (XOXO.isArray(kv)) { var sum = []; for (var d = 0; d < kv.length; d++) sum.push(kv[d] + base[d]); kv = sum; }
+      else kv = kv + base;
+    }
+    p.setValueAtTime(k.t, XOXO.coerce(p, kv));
   }
   var warnings = [];
   var ease = XOXO.def(a.ease, "linear");
